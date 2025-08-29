@@ -1,0 +1,261 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Node Energy Agent Config",
+  "type": "object",
+  "required": ["agent", "target", "energy", "attribution", "carbon", "export", "logging", "limits"],
+  "properties": {
+    "agent": {
+      "type": "object",
+      "required": ["sampling", "windows", "timezone"],
+      "properties": {
+        "sampling": {
+          "type": "object",
+          "required": ["period_ms"],
+          "properties": {
+            "period_ms": { "type": "integer", "minimum": 100, "maximum": 10000 }
+          },
+          "additionalProperties": false
+        },
+        "windows": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" }
+        },
+        "timezone": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "target": {
+      "type": "object",
+      "required": ["selector", "eventloop_probe"],
+      "properties": {
+        "selector": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["pid", "process_name", "port", "cgroup"] },
+            "pid": { "type": "integer", "minimum": 1 },
+            "process_name": { "type": "string", "minLength": 1 },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "cgroup": { "type": "string", "minLength": 1 }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "mode": { "const": "pid" } } },
+              "then": { "required": ["pid"] }
+            },
+            {
+              "if": { "properties": { "mode": { "const": "process_name" } } },
+              "then": { "required": ["process_name"] }
+            },
+            {
+              "if": { "properties": { "mode": { "const": "port" } } },
+              "then": { "required": ["port"] }
+            },
+            {
+              "if": { "properties": { "mode": { "const": "cgroup" } } },
+              "then": { "required": ["cgroup"] }
+            }
+          ],
+          "additionalProperties": false
+        },
+
+        "eventloop_probe": {
+          "type": "object",
+          "required": ["enabled", "expected_interval_ms", "ingest"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "expected_interval_ms": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "ingest": {
+              "type": "object",
+              "required": ["transport"],
+              "properties": {
+                "transport": { "type": "string", "enum": ["uds", "udp", "http"] },
+                "uds_path": { "type": "string", "minLength": 1 },
+                "udp_host": { "type": "string" },
+                "udp_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "http_url": { "type": "string", "minLength": 1 }
+              },
+              "allOf": [
+                {
+                  "if": { "properties": { "transport": { "const": "uds" } } },
+                  "then": { "required": ["uds_path"] }
+                },
+                {
+                  "if": { "properties": { "transport": { "const": "udp" } } },
+                  "then": { "required": ["udp_host", "udp_port"] }
+                },
+                {
+                  "if": { "properties": { "transport": { "const": "http" } } },
+                  "then": { "required": ["http_url"] }
+                }
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "energy": {
+      "type": "object",
+      "required": ["sensors", "idle_baseline_wh_per_min"],
+      "properties": {
+        "sensors": {
+          "type": "object",
+          "required": ["rapl", "gpu"],
+          "properties": {
+            "rapl": {
+              "type": "object",
+              "required": ["enabled", "base_path", "packages"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "base_path": { "type": "string", "minLength": 1 },
+                "packages": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "required":{"type":"boolean"},
+                "vendors":{"type":"array", "items": {"type":"string"}}
+              },
+              "additionalProperties": false
+            },
+            "gpu": {
+              "type": "object",
+              "required": ["enabled"],
+              "properties": {
+                "enabled": { "type": "boolean" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "idle_baseline_wh_per_min": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "attribution": {
+      "type": "object",
+      "required": ["mode", "multifactor"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["cpu_share", "multifactor"] },
+        "multifactor": {
+          "type": "object",
+          "required": ["enabled", "coefficients"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "coefficients": {
+              "type": "object",
+              "required": ["w0", "w1", "w2", "w3", "w4"],
+              "properties": {
+                "w0": { "type": "number" },
+                "w1": { "type": "number" },
+                "w2": { "type": "number" },
+                "w3": { "type": "number" },
+                "w4": { "type": "number" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "carbon": {
+      "type": "object",
+      "required": ["source", "zone", "default_kg_per_kwh"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["file", "http"] },
+            "file": { "type": "string", "minLength": 1 },
+            "http_url": { "type": "string", "minLength": 1 }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "type": { "const": "file" } } },
+              "then": { "required": ["file"] }
+            },
+            {
+              "if": { "properties": { "type": { "const": "http" } } },
+              "then": { "required": ["http_url"] }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "zone": { "type": "string", "minLength": 1 },
+        "default_kg_per_kwh": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "export": {
+      "type": "object",
+      "required": ["http", "file"],
+      "properties": {
+        "http": {
+          "type": "object",
+          "required": ["enabled", "listen", "port", "endpoints"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "listen": { "type": "string" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "endpoints": {
+              "type": "object",
+              "required": ["metrics", "snapshot", "healthz", "ingest_eventloop"],
+              "properties": {
+                "metrics": { "type": "string" },
+                "snapshot": { "type": "string" },
+                "healthz": { "type": "string" },
+                "ingest_eventloop": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "file": {
+          "type": "object",
+          "required": ["ndjson_enabled", "path", "rotate_mb"],
+          "properties": {
+            "ndjson_enabled": { "type": "boolean" },
+            "path": { "type": "string", "minLength": 1 },
+            "rotate_mb": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "logging": {
+      "type": "object",
+      "required": ["level", "file"],
+      "properties": {
+        "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+        "file": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "limits": {
+      "type": "object",
+      "required": ["max_rps_ingest", "max_mem_mb"],
+      "properties": {
+        "max_rps_ingest": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "max_mem_mb": { "type": "integer", "minimum": 32, "maximum": 4096 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
