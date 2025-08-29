@@ -154,6 +154,3 @@ export async function probeRapl(options = {}) {
 
   return { status,vendor, packages,hint };
 }
-
-
-console.log(await probeRapl());
