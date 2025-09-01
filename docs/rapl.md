@@ -47,7 +47,7 @@ output:
       "node": "intel-rapl:0",
       "path": "/sys/class/powercap/intel-rapl:0",
       "name": "package-0",
-      "rhasEnergyUjReadable": true,
+      "hasEnergyUjReadable": true,
       "reason": null,
       "maxEnergyRangeUj": 65532610987,
       "files": {
