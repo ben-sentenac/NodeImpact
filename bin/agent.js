@@ -2,6 +2,9 @@ import process from 'node:process';
 import path from 'node:path';
 import { parseConfig } from '../src/config.js';
 import { buildServer } from '../src/server.js';
+import RaplReader from '../src/sensors/RaplReader.js';
+import { probeRapl } from '../src/sensors/rapl.js';
+import { startMainLoop } from '../src/loop.js';
 
 
 const CONFIG_FILE = path.join(path.dirname(import.meta.dirname), 'agent.config.json');
@@ -19,7 +22,18 @@ try {
 const PORT = Number(config?.export?.http?.port ?? 9465);
 const HOST = config?.export?.http?.listen ?? '0.0.0.0';
 
-const server = await buildServer({config});
+let shared = {energy:null};
+
+const probe = await probeRapl(config.energy.sensors.rapl);
+
+if(probe.status === 'OK') {
+    const raplReader = new RaplReader(probe);
+    startMainLoop({config,raplReader,shared});
+} else {
+    console.warn('[agent] RAPL not OK (', probe.status, '). Energy loop disabled for now.', probe.hint);
+}
+
+const server = await buildServer({config, shared });
 
 async function start() {
     try {

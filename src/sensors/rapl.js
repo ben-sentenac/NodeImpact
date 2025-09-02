@@ -23,7 +23,7 @@ Ce fichier indique la valeur maximale que energy_uj peut atteindre avant de reve
 
 C’est un compteur circulaire : quand energy_uj dépasse max_energy_range_uj, il recommence à zéro.
 
-en tenir compte pour éviter des erreurs de calcul si tu fais des mesures longues.
+en tenir compte pour éviter des erreurs de calcul si mesures longues.
 max_energy_range_uj = 262143999999
 
 // Si energy_uj passe de 262143999900 à 100
@@ -105,8 +105,6 @@ export async function probeRapl(options = {}) {
 
     // tester lisibilité de energy_uj (R_OK), sans forcément le lire
     
-
-
     const [readable,maxEnergyRangeStrJ] = await Promise.all([
       accessReadable(energyPath),
       fs.readFile(maxRangePath, 'utf8').catch(() => null)
@@ -149,7 +147,7 @@ export async function probeRapl(options = {}) {
     const anyReadable = packages.some(p => p.hasEnergyUjReadable);
     const vendor =  packages.find(p => p.hasEnergyUjReadable)?.vendor || packages[0].vendor;
     const status = anyReadable ? 'OK' : 'DEGRADED';
-    const hint = anyReadable ? undefined
+    const hint = anyReadable ? null
     : 'RAPL present but unreadable (permissions). Run agent as root or add user to proper group (udev).';
 
   return { status,vendor, packages,hint };

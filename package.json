@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node --watch bin/agent.js --config agent-config-yaml",
+    "dev":"sudo $(which node) bin/agent.js",
     "test":"node --test --watch"
   },
   "keywords": [],
