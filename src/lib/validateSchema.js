@@ -10,7 +10,7 @@ export function validateConfigSchema(_config) {
 
     if(!valid) {
        const errors = validate.errors.map(err => `${err.instancePath} ${err.message}`).join('\n');
-        throw new Error(`La validation du fichier de configuration a échouée :\n${errors}`)
+        throw new Error(`Config_validation_failed :\n${errors}`)
     }
 
     return true;
