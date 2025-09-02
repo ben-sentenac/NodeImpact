@@ -9,34 +9,38 @@ function worstCaseStatus (statuses = []) {
 
 function getProcStatus() {
     return readFile('/proc/stat','utf8').then((data) => {
-        const hasCpuLine = data.split('\n').some(line => line.startsWith('cpu'));
+        const hasCpuLine = data.split('\n').some(line => line.startsWith('cpu '));
         return hasCpuLine ? 'OK' : 'FAILED';
     }).catch(err => 'FAILED');
 }
 
-export async function buildServer({config} = {}) {
+export async function buildServer({config, shared} = {}) {
+
     const app = fastify({ logger: true });
 
     app.get('/healthz', async (req, reply) => {
         const procStatus = await getProcStatus();
         let raplProbe;
         try {
-            raplProbe = await probeRapl(config?.energy?.sensor?.rapl);
+            raplProbe = await probeRapl(config?.energy?.sensors?.rapl); //ajouter cache plus tard
         } catch (error) {
             raplProbe = {status:'FAILED'};
         }
 
         const rapl = raplProbe;
-
         const raplStatus = rapl?.status || 'FAILED';
+        const energy = shared.energy || null;
 
         const status = worstCaseStatus([procStatus,raplStatus]);
+
+        console.log(energy);
         
         return {
             "status": status,
             "details": {
                 "proc": procStatus,
-                "rapl": rapl
+                "rapl": rapl,
+                "energy_last": energy ? energy : null
             }
         }
     });
