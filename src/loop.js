@@ -14,8 +14,8 @@ export function startMainLoop({ config, raplReader, shared, logger = console }) 
            const reader = await raplReader.sample(nowNs);
 
             shared.energy = {
-                power_W: reader.power_w,
-                delta_J: reader.delta_j,
+                power_W: Number(reader.power_w.toFixed(3)),
+                delta_J: Number(reader.delta_j.toFixed(3)),
                 dt_s: reader.delta_ts,
                 ts: new Date().toISOString()
             }

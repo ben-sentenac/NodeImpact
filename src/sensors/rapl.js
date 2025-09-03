@@ -67,6 +67,11 @@ async function accessReadable(file) {
 
 const DEFAULT_BASE_PATH = '/sys/class/powercap';
 
+/**
+ * TODO
+  * mettre un petit cache 30–60 s sur probeRapl() pour éviter de rescanner /sys à chaque /healthz.
+ */
+
 export async function probeRapl(options = {}) {
     /**
      * On considère OK si au moins un package a energy_uj LISIBLE (droit R_OK).

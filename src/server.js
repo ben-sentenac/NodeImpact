@@ -14,6 +14,12 @@ function getProcStatus() {
     }).catch(err => 'FAILED');
 }
 
+  /**
+    * TODO
+    * arrondir côté /healthz (ex. power_W à 3 décimales),
+    *  inclure wraps et  un delta par package pour le debug,
+*/
+
 export async function buildServer({config, shared} = {}) {
 
     const app = fastify({ logger: true });
@@ -32,8 +38,6 @@ export async function buildServer({config, shared} = {}) {
         const energy = shared.energy || null;
 
         const status = worstCaseStatus([procStatus,raplStatus]);
-
-        console.log(energy);
         
         return {
             "status": status,

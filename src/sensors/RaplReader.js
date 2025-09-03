@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 * Quand il atteint une valeur max (fichier max_energy_range_uj), il repart à 0 on appelle ça un wrap (dépassement).
 * donc si delta negatif il y'eu depassement
  */
+
+
 export default class RaplReader {
     constructor(probe = {}) {
         const packages = (probe?.packages || []).filter(p => p.hasEnergyUjReadable && p.files?.energy_uj);
@@ -35,7 +37,7 @@ export default class RaplReader {
     async sample(nowNs) {
         //dépassement
         let wraps = 0n;
-        let delta_uj_total = 0n;
+        let delta_uj_total = 0n;//energie_cumulé_uj
 
         if (this.state.lastNs === null) {
             this.state.lastNs = nowNs;
