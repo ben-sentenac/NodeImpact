@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { clampDt } from "../lib/cpu_utils";
 /**
  * Chaque CPU (par “package”) expose un compteur d’énergie cumulée depuis le boot : energy_uj (en microjoules).
 * Ce compteur augmente en continu tant que la machine tourne.
@@ -25,12 +26,7 @@ export default class RaplReader {
 
     //on borne dt dans [0.2,5] si server ou vm freeze au pour ne pas se retrouver avec un dt absurde si l'intervalle derape
     #clampDt(dt, min = 0.2, max = 5) {
-        if (!Number.isFinite(dt) || dt <= 0) {
-            return min;
-        }
-        if (dt < min) return min;
-        if (dt > max) return max;
-        return dt;
+        return clampDt(dt,min,max);
     }
 
 
