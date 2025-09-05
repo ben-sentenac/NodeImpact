@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { clampDt } from "../lib/cpu_utils";
+import { clampDt } from "../lib/cpu_utils.js";
 /**
  * Chaque CPU (par “package”) expose un compteur d’énergie cumulée depuis le boot : energy_uj (en microjoules).
 * Ce compteur augmente en continu tant que la machine tourne.
@@ -23,13 +23,6 @@ export default class RaplReader {
             }))
         };
     }
-
-    //on borne dt dans [0.2,5] si server ou vm freeze au pour ne pas se retrouver avec un dt absurde si l'intervalle derape
-    #clampDt(dt, min = 0.2, max = 5) {
-        return clampDt(dt,min,max);
-    }
-
-
     async sample(nowNs) {
         //dépassement
         let wraps = 0n;
@@ -61,7 +54,8 @@ export default class RaplReader {
         }
 
         let delta_ts = Number(nowNs - this.state.lastNs) / 1e9;//t en s
-        delta_ts = this.#clampDt(delta_ts);
+         //on borne dt dans [0.2,5] si server ou vm freeze au pour ne pas se retrouver avec un dt absurde si l'intervalle derape
+        delta_ts = clampDt(delta_ts);
         this.state.lastNs = nowNs;
         //console.log(delta_uj_total,delta_ts,this.state.lastNs);
 
