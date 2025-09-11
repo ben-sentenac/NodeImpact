@@ -64,7 +64,7 @@ test rapide : sudo node bin/agent.js ...
 
 - [x] Healthz (proc + RAPL)
 
-- [ ] Boucle 1 Hz énergie (Δ energy_uj + wrap)
+- [x] Boucle 1 Hz énergie (Δ energy_uj + wrap)
 
 - [ ] CPU share attribution
 
