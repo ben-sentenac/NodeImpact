@@ -68,7 +68,7 @@ export default class HostCpuReader {
 
         return {
             ok: true,
-            timeStamp:new Date().toISOString(),                // snapshot lu avec succès
+            timeStamp:new Date().toISOString(),               
             dt_s,                     // Δt mur (clampé)
             host_active_s,            // Δ secondes CPU actives (agrégé)
             host_idle_s,              // Δ secondes CPU idle (optionnel, utile pour % busy)

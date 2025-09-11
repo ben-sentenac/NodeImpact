@@ -35,16 +35,20 @@ export async function buildServer({config, shared} = {}) {
 
         const rapl = raplProbe;
         const raplStatus = rapl?.status || 'FAILED';
-        const energy = shared.energy || null;
+        const host_energy = shared.energy || null;
+        const cpu_distribution = shared.cpu_last || null;
+        const app_energy = shared.power_app_last || null
 
         const status = worstCaseStatus([procStatus,raplStatus]);
         
         return {
             "status": status,
+            "linux_proc_status":procStatus,//test minimal /proc/stat
             "details": {
-                "proc": procStatus,
-                "rapl": rapl,
-                "energy_last": energy ? energy : null
+                "rapl_probe": rapl,//état du capteur RAPL (packages, vendor, status)
+                "host_energy": host_energy,
+                "cpu_distribution":cpu_distribution,
+                "app_energy":app_energy
             }
         }
     });

@@ -1,25 +1,37 @@
-import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
+/**
+ * TODO
+ * ΔCPU_host_s : secondes CPU “actives” de l’hôte sur l’intervalle,
+ * ΔCPU_app_s : secondes CPU consommées par le PID cible,
+ * share = ΔCPU_app_s / ΔCPU_host_s (borné),
+ * gérer redémarrage de PID et cas limites.
+ */
 
 const FLAG_CATEGORIES = {
-  [Symbol('virtualization')]: ['vmx', 'svm', 'ept', 'npt', 'tpr_shadow', 'vme'],
-  [Symbol('security')]: ['nx', 'smap', 'smep', 'md_clear', 'pti', 'lahf_lm', 'rdtscp'],
-  [Symbol('crypto')]: ['aes', 'rdrand', 'rdseed', 'sha_ni'],
-  [Symbol('performance')]: [
-    'sse', 'sse2', 'sse3', 'ssse3', 'sse4_1', 'sse4_2',
-    'avx', 'avx2', 'fma', 'mmx', 'pni', 'popcnt',
-    'xsave', 'xsaveopt', 'xsavec', 'xsaves'
-  ],
-  [Symbol('management')]: ['hwp', 'tsc', 'cpuid', 'clflush', 'invariant_tsc', 'constant_tsc']
+    ['virtualization']: ['vmx', 'svm', 'ept', 'npt', 'tpr_shadow', 'vme'],
+    ['security']: ['nx', 'smap', 'smep', 'md_clear', 'pti', 'lahf_lm', 'rdtscp'],
+    ['crypto']: ['aes', 'rdrand', 'rdseed', 'sha_ni'],
+    ['performance']: [
+        'sse', 'sse2', 'sse3', 'ssse3', 'sse4_1', 'sse4_2',
+        'avx', 'avx2', 'fma', 'mmx', 'pni', 'popcnt',
+        'xsave', 'xsaveopt', 'xsavec', 'xsaves'
+    ],
+    ['management']: ['hwp', 'tsc', 'cpuid', 'clflush', 'invariant_tsc', 'constant_tsc']
 };
 
 
+const CPU_FILES_INFO = {
+    cpuInfo: '/proc/cpuinfo',
+    stat: '/proc/stat'
+};
+
 export default class SystemCpuProfiler {
-  
-    constructor(filePath = '/proc/cpuinfo') {
-        this.filePath = filePath;
+
+    constructor({ cpuInfo, stat } = CPU_FILES_INFO) {
+        this.cpuFiles = { cpuInfo, stat };
         this.cpus = [];
+        this.cpuStatSnapshot = null;
     }
 
     analyzeFlags(flags) {
@@ -27,70 +39,141 @@ export default class SystemCpuProfiler {
         return {
             virtualisable: _flags.includes('vmx') || _flags.includes('svm'),
             aesSupport: _flags.includes('aes'),
-            hyperThreading: _flags.includes('ht'),
             secureBootCapable: _flags.includes('nx') && _flags.includes('smap') && _flags.includes('smep')
         };
     }
 
     #groupFlags(flagsStr) {
-    const flags = flagsStr.split(' ');
-    const grouped = {};
-
-    for (const symbol of Object.getOwnPropertySymbols(FLAG_CATEGORIES)) {
-      const categoryName = symbol.description;
-      grouped[categoryName] = flags.filter(f => FLAG_CATEGORIES[symbol].includes(f));
+        const flags = flagsStr.split(' ');
+        const grouped = {};
+        for (const key of Object.keys(FLAG_CATEGORIES)) {
+            const set = new Set(FLAG_CATEGORIES[key]);
+            grouped[key] = flags.filter(f => set.has(f));
+        }
+        return grouped;
     }
 
-    return grouped;
-  }
-
     async getAllCpusDetails() {
-        return this.cpus.length > 0 ? this.cpus : await this.#ParseCpuInfo();
+        return this.cpus.length > 0 ? this.cpus : await this.#parseCpuInfo();
+    }
+
+    getLastSnapshot() {
+        return this.cpuStatSnapshot
     }
 
     async cpuInfo() {
-        const cpus = await this.#ParseCpuInfo();
+        const cpus = await this.#parseCpuInfo();
+        if (!cpus.length) {
+            return { timestamp: new Date().toISOString(), cpu: null, error: 'cpuinfo_unavailable' };
+        }
         const flags = { ...this.analyzeFlags(cpus[0]['flags']) };
-        const timeStamps = new Date(Date.now()).toISOString();
-        const freqMHz = cpus.map(cpu => parseFloat(cpu['cpu_mhz']));
+        const timestamp = new Date().toISOString();
+        const freqMHz = cpus.map(cpu => parseFloat(cpu['cpu_mhz']) || 0).filter(n => Number.isFinite(n));
         const totalFreq = freqMHz.reduce((sum, freq) => sum + freq, 0);
-        const maxFreq = Math.max(...freqMHz);
-        const minFreq = Math.min(...freqMHz);
+        const maxFreq = freqMHz.length ? Math.max(...freqMHz) : 0;
+        const minFreq = freqMHz.length ? Math.min(...freqMHz) : 0;
         const spreadFreq = maxFreq - minFreq;
-        const averageFreq = totalFreq / freqMHz.length;
-        const logicalCores = cpus[0]['siblings'];
-        const cpuLoadEstimate = averageFreq / maxFreq;
+        const averageFreq = freqMHz.length ? totalFreq / freqMHz.length : 0;
+        const logicalCores = parseInt(cpus[0]['siblings'] || '0', 10);
+        const physicalCores = parseInt(cpus[0]['cpu_cores'] || '0', 10);
+        const cpuLoadEstimate = maxFreq > 0 ? averageFreq / maxFreq : 0;
+        const hyperThreading = logicalCores > physicalCores;
 
         return {
-            timeStamps,
+            timestamp,
             cpu: {
-                 vendor: cpus[0]['vendor_id'], 
-                 model: cpus[0]['model_name'],
-                 cores:{
-                    physical: parseInt(cpus[0]['cpu_cores']),
-                    logical:parseInt(logicalCores)
-                 },
-                 frequency:{
-                    unit:'MHz',
-                    total:totalFreq,
-                    average:averageFreq,
-                    max:maxFreq,
-                    min:minFreq,
-                    spread:spreadFreq,
-                    loadEstimate:cpuLoadEstimate
-                 },
-                 cache:cpus[0]['cache_size'],
-                 powerManagement: cpus[0]['power_management'],
-                 capabilities: flags,
+                vendor: cpus[0]['vendor_id'],
+                model: cpus[0]['model_name'],
+                cores: {
+                    physical: physicalCores,
+                    logical: logicalCores
+                },
+                frequency: {
+                    unit: 'MHz',
+                    total: totalFreq,
+                    average: averageFreq,
+                    max: maxFreq,
+                    min: minFreq,
+                    spread: spreadFreq,
+                    loadEstimate: cpuLoadEstimate
+                },
+                cache: cpus[0]['cache_size'],
+                powerManagement: cpus[0]['power_management'],
+                capabilities: flags,
+                hyperThreading
             },
         }
     }
+    //100 par default ajouter USR_HZ une détection plus tard
+    async stat() {
+        const stats = (await this.#parseStat()).aggregate;
+        //unit jiffy (1/100 seconds (10 ms)
+        //jiffy est une unité de temps utilisée par le noyau Linux pour mesurer l’activité du système. Sa durée dépend de la configuration du noyau
+        //définie par USER_HZ, généralement égale à 100
+        //getconf CLK_OK pour tester
+        const USER_HZ = 100;
+        const activeCpuTicks = stats.user + stats.nice + stats.system + stats.irq + stats.softirq + stats.steal;
+        const idleCpuTicks = stats.idle + stats.iowait
+        const activeCpuTime = activeCpuTicks / USER_HZ;
+        const idleCpuTime = idleCpuTicks / USER_HZ;
 
-    async #ParseCpuInfo() {
+        return {
+            timestamp: new Date().toISOString(),
+            unit: 'seconds',
+            activeCpuTime,
+            idleCpuTime,
+            ticks: {
+                unit: 'jiffy',
+                activeCpuTicks,
+                idleCpuTicks,
+                USER_HZ
+            }
+        }
+    }
+
+    async #parseStat() {
         try {
-            const normalized = (await readFile(this.filePath, 'utf8')).replace(/\r\n/g, '\n').split('\n');
+            const statInfo = (await readFile(this.cpuFiles.stat, 'utf8')).trim().split('\n');
+            let cpuStatSnapshot = { timestamp: null, aggregate: {}, perCpu: [] };
+            let currentCpuStat = {};
+            for (const line of statInfo) {
+                if (!line.startsWith('cpu')) continue;
+                const parts = line.trim().split(/\s+/);
+                const num = (i) => Number(parts[i]) ?? 0;
+                const stat = {
+                    id: parts[0],
+                    user: num(1),
+                    nice: num(2),
+                    system: num(3),
+                    idle: num(4),
+                    iowait: num(5),
+                    irq: num(6),
+                    softirq: num(7),
+                    steal: num(8),
+                    guest: num(9),
+                    guest_nice: num(10)
+                }
+
+                if (line.startsWith('cpu ')) {
+                    cpuStatSnapshot.aggregate = stat;
+                } else {
+                    cpuStatSnapshot.perCpu.push(stat);
+                }
+
+                currentCpuStat = {};
+            }
+            cpuStatSnapshot.timestamp = new Date().toISOString();
+            this.cpuStatSnapshot = cpuStatSnapshot;
+            return cpuStatSnapshot;
+        } catch (error) {
+            throw new Error(`Failed to parse stat file: ${error.message}`);
+        }
+    }
+
+    async #parseCpuInfo() {
+        try {
+            const normalized = (await readFile(this.cpuFiles.cpuInfo, 'utf8')).replace(/\r\n/g, '\n').split('\n');
             let currentCpu = {};
-            let model = undefined;
             let collecting = false;
 
             for (const line of normalized) {
@@ -113,7 +196,13 @@ export default class SystemCpuProfiler {
                     this.cpus.push(currentCpu);
                     currentCpu = {};
                     collecting = false;
+                    // on ne sait pas si "power management" est présent,on ne se base pas dessus
                 }
+            }
+
+            // pousse le dernier CPU si non vide
+            if (Object.keys(currentCpu).length > 0) {
+                this.cpus.push(currentCpu);
             }
 
             return this.cpus;
@@ -123,4 +212,5 @@ export default class SystemCpuProfiler {
         }
     }
 }
+
 
