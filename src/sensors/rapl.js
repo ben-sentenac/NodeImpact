@@ -59,7 +59,7 @@ export async function probeRapl(options = {}) {
 
   for (const entry of dirEntries) {
    
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) contin
 
     const dirname = entry.name;
 
