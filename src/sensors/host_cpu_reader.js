@@ -1,4 +1,3 @@
-import { timeStamp } from "node:console";
 import { clampDt } from "../lib/cpu_utils.js";
 import SystemCpuProfiler from "./cpu.js";
 
@@ -15,7 +14,6 @@ export default class HostCpuReader {
 
     //nowns passé depuis la boucle
     async sample(nowNs) {
-        console.log(nowNs)
 
         const { ticks } = await this.profiler.stat();
 
@@ -41,13 +39,13 @@ export default class HostCpuReader {
             }
         }
 
-        if (!this.lastActiveCpuTicks || !this.lastIdleCpuTicks) {
-            this.lastActiveCpuTicks = activeCpuTicks;
-            this.lastIdleCpuTicks = idleCpuTicks;
+        if (!this.state.lastActiveCpuTicks || !this.state.lastIdleCpuTicks) {
+            this.state.lastActiveCpuTicks = activeCpuTicks;
+            this.state.lastIdleCpuTicks = idleCpuTicks;
         }
 
-        const delta_active = activeCpuTicks - this.lastActiveCpuTicks;
-        const delta_idle = idleCpuTicks - this.lastIdleCpuTicks;
+        const delta_active = activeCpuTicks - this.state.lastActiveCpuTicks;
+        const delta_idle = idleCpuTicks - this.state.lastIdleCpuTicks;
 
         // clamp contre valeurs négatives
         if (delta_active < 0) delta_active = 0;
@@ -62,13 +60,13 @@ export default class HostCpuReader {
 
         //maj state
         this.state.lastNs = nowNs;
-        this.lastActiveCpuTicks = activeCpuTicks;
-        this.lastIdleCpuTicks = idleCpuTicks;
+        this.state.lastActiveCpuTicks = activeCpuTicks;
+        this.state.lastIdleCpuTicks = idleCpuTicks;
 
 
         return {
             ok: true,
-            timeStamp:new Date().toISOString(),               
+            timestamp:new Date().toISOString(),               
             dt_s,                     // Δt mur (clampé)
             host_active_s,            // Δ secondes CPU actives (agrégé)
             host_idle_s,              // Δ secondes CPU idle (optionnel, utile pour % busy)
