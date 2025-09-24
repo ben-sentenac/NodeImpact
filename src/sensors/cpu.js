@@ -54,7 +54,7 @@ export default class SystemCpuProfiler {
     }
 
     async getAllCpusDetails() {
-        return this.cpus.length > 0 ? this.cpus : await this.#parseCpuInfo();
+        return await this.#parseCpuInfo();
     }
 
     getLastSnapshot() {
@@ -62,9 +62,9 @@ export default class SystemCpuProfiler {
     }
 
     async cpuInfo() {
-        const cpus = await this.#parseCpuInfo();
+        const cpus = await this.getAllCpusDetails(); //await this.#parseCpuInfo();
         if (!cpus.length) {
-            return { timestamp: new Date().toISOString(), cpu: null, error: 'cpuinfo_unavailable' };
+            return { ok:false, timestamp: new Date().toISOString(), cpu: null, error: 'cpuinfo_unavailable' };
         }
         const flags = { ...this.analyzeFlags(cpus[0]['flags']) };
         const timestamp = new Date().toISOString();
@@ -80,6 +80,7 @@ export default class SystemCpuProfiler {
         const hyperThreading = logicalCores > physicalCores;
 
         return {
+            ok: true,
             timestamp,
             cpu: {
                 vendor: cpus[0]['vendor_id'],
@@ -106,11 +107,22 @@ export default class SystemCpuProfiler {
     }
     //100 par default ajouter USR_HZ une détection plus tard
     async stat() {
-        const stats = (await this.#parseStat()).aggregate;
+        try {
+            const stats = (await this.#parseStat()).aggregate;
         //unit jiffy (1/100 seconds (10 ms)
         //jiffy est une unité de temps utilisée par le noyau Linux pour mesurer l’activité du système. Sa durée dépend de la configuration du noyau
         //définie par USER_HZ, généralement égale à 100
         //getconf CLK_OK pour tester
+        if (!stats || Object.keys(stats).length === 0) {
+            return { ok:false, timestamp: new Date().toISOString(), error: 'stat_unavailable' };
+        }
+        //const USER_HZ = parseInt((await execCommand('getconf CLK_TCK')).trim(),10) || 100;
+        //sur certaines plateformes USER_HZ peut être différent de 100
+        //exemple macos 1000
+        //mais /proc/stat n'existe pas sur macos
+        //on pourrait envisager une détection plus tard
+        //pour l'instant on se base sur 100
+        //https://man7.org/linux
         const USER_HZ = 100;
         const activeCpuTicks = stats.user + stats.nice + stats.system + stats.irq + stats.softirq + stats.steal;
         const idleCpuTicks = stats.idle + stats.iowait
@@ -118,6 +130,7 @@ export default class SystemCpuProfiler {
         const idleCpuTime = idleCpuTicks / USER_HZ;
 
         return {
+            ok:true,
             timestamp: new Date().toISOString(),
             unit: 'seconds',
             activeCpuTime,
@@ -129,6 +142,10 @@ export default class SystemCpuProfiler {
                 USER_HZ
             }
         }
+        } catch (error) {
+            return { ok: false, timestamp: new Date().toISOString(), error: error.message };
+        }
+        
     }
 
     async #parseStat() {
@@ -166,11 +183,14 @@ export default class SystemCpuProfiler {
             this.cpuStatSnapshot = cpuStatSnapshot;
             return cpuStatSnapshot;
         } catch (error) {
-            throw new Error(`Failed to parse stat file: ${error.message}`);
+            throw new Error(`Failed to parse /proc/stat: ${error.message}`);
         }
     }
 
     async #parseCpuInfo() {
+        //reinitialise before parsing, in case of re-call, e.g. file changed
+        // add watch file change later, and cache to update only on change
+        this.cpus = [];
         try {
             const normalized = (await readFile(this.cpuFiles.cpuInfo, 'utf8')).replace(/\r\n/g, '\n').split('\n');
             let currentCpu = {};
