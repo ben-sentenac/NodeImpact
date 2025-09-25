@@ -1,4 +1,4 @@
-name: Node.js CI with pnpm (multi-version)
+name: Node.js CI with pnpm and native test runner
 
 on:
   push:
@@ -29,9 +29,11 @@ jobs:
     - name: Install pnpm
       run: npm install -g pnpm
 
+    - name: Verify pnpm version
+      run: pnpm --version
+
     - name: Install dependencies
       run: pnpm install
 
     - name: Run tests
       run: pnpm test
-
