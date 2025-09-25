@@ -3,3 +3,5 @@ node_modules
 .env.local
 todo.md
 commit_type.md
+.pdf
+docs
