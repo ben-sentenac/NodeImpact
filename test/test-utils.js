@@ -35,6 +35,34 @@ async function createFakeFile(source,dest,content = null) {
     }
 }
 
+async function createRaplPackages(baseDir, nodeName, { name = 'package-0', energy = 0n, maxRange = 0n }) {
+    const pkgDir = path.join(baseDir, nodeName);
+    await mkdir(pkgDir, { recursive: true });
+
+    const namePath = path.join(pkgDir, 'name');
+    const energyPath = path.join(pkgDir, 'energy_uj');
+    const maxRangePath = path.join(pkgDir, 'max_energy_range_uj');
+
+    await Promise.all([
+        writeFile(namePath, name, 'utf8'),
+        writeFile(energyPath, String(energy), 'utf8'),
+        maxRange > 0n ? writeFile(maxRangePath, String(maxRange), 'utf8') : null
+    ]);
+
+    return { dir: pkgDir, files: { namePath, energyPath, maxRangePath } };
+}
+
+async function setEnergy(pkg, valueBigInt) {
+    await writeFile(pkg.files.energyPath ?? pkg.files.energy_uj ?? path.join(pkg.dir, 'energy_uj'), String(valueBigInt), 'utf8');
+}
+
+//nowNs(1.0) => 1e9n
+const nowNs = (n) => BigInt(Math.round(n * 1e9));
+
+
+
+
+
 async function createCpuInfo(outDir,source = '/proc/cpuinfo') {
 
     const dest = outDir ? path.join(outDir,'cpuinfo'): path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`, 'cpuinfo');
@@ -82,6 +110,9 @@ export {
     TEST_PATH,
     FIXTURE_PATH,
     makeTempDir,
+    createRaplPackages,
+    nowNs,
+    setEnergy,
     createCpuInfo,
     createStat,
     createFakeFile,

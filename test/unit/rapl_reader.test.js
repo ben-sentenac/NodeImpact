@@ -5,47 +5,26 @@ import RaplReader from '../../src/sensors/rapl_reader.js';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { clampDt } from '../../src/lib/cpu_utils.js';
+import { nowNs,setEnergy,createRaplPackages } from '../test-utils.js';
 
 
-async function createRaplPackages(baseDir, nodeName, { name = 'package-0', energy = 0n, maxRange = 0n }) {
-    const pkgDir = path.join(baseDir, nodeName);
-    await mkdir(pkgDir, { recursive: true });
-
-    const namePath = path.join(pkgDir, 'name');
-    const energyPath = path.join(pkgDir, 'energy_uj');
-    const maxRangePath = path.join(pkgDir, 'max_energy_range_uj');
-
-    await Promise.all([
-        writeFile(namePath, name, 'utf8'),
-        writeFile(energyPath, String(energy), 'utf8'),
-        maxRange > 0n ? writeFile(maxRangePath, String(maxRange), 'utf8') : null
-    ]);
-
-    return { dir: pkgDir, files: { namePath, energyPath, maxRangePath } };
-}
-
-async function setEnergy(pkg, valueBigInt) {
-    await writeFile(pkg.files.energyPath ?? pkg.files.energy_uj ?? path.join(pkg.dir, 'energy_uj'), String(valueBigInt), 'utf8');
-}
-
-//nowNs(1.0) => 1e9n
-const nowNs = (n) => BigInt(Math.round(n * 1e9));
 
 
 let tmp;
 let pkgs = [];
 
+
+beforeEach(async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'rapl-test-'));
+    pkgs = [];
+
+});
+
+afterEach(async () => {
+    await rm(tmp, { force: true, recursive: true });
+});
+
 test('RAPL READER TEST SUITE', async (t) => {
-
-    beforeEach(async () => {
-        tmp = await mkdtemp(path.join(os.tmpdir(), 'rapl-test-'));
-        pkgs = [];
-
-    });
-
-    afterEach(async () => {
-        await rm(tmp, { force: true, recursive: true });
-    });
 
     await t.test('PRIME:first tick should return the right prime value', async () => {
         const pkg0 = await createRaplPackages(tmp, 'intel-rapl:0', { name: 'package-0', energy: 1_000_000n, maxRange: 65_532_610_987n });

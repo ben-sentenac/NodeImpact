@@ -1,7 +1,7 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { FIXTURE_PATH, createStat, createStatUnderControl } from '../test-utils.js';
+import { FIXTURE_PATH, createStatUnderControl,nowNs as generateNowNs } from '../test-utils.js';
 import { rm, mkdir } from 'node:fs/promises';
 import HostCpuReader from '../../src/sensors/host_cpu_reader.js';
 import SystemCpuProfiler from '../../src/sensors/cpu.js';
@@ -44,13 +44,13 @@ test('HOST CPU READER TEST SUITE', async (t) => {
         //update le fichier stat pour simuler une activité CPU
         await createStatUnderControl(temp,{ user: 1100, system: 600, idle: 2200 });
 
-        const nowNs2 = nowNs + BigInt(1e9); // 1 seconde plus tard
+        const nowNs2 = nowNs + generateNowNs(1.0); // 1 seconde plus tard
         const res2 = await reader.sample(nowNs2);
 
         t.diagnostic(`Second sample: ${JSON.stringify(res2, null, 2)}`);
 
         assert.ok(res2.ok);
-        // teste les bornes
+        // teste les bornes min / max
         assert.ok(res2.dt_s >= 0.001 && res2.dt_s <= 10);
         assert.strictEqual(res2.dt_s, clampDt(1));
 
