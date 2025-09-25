@@ -30,8 +30,10 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'pnpm'
 
-    - name: Install pnpm (stable method)
-      run: npm install -g pnpm
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
 
     - name: Verify pnpm version
       run: pnpm --version
