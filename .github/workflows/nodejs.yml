@@ -1,4 +1,4 @@
-name: Node.js CI with pnpm and native test runner
+name: Node.js CI (pnpm + native test runner)
 
 on:
   push:
@@ -10,15 +10,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    env:
-      ACTIONS_RUNNER_DEBUG: true
-      ACTIONS_STEP_DEBUG: true
-
     strategy:
       matrix:
         node-version: [18.x, 20.x, 22.x, 24.x]
-
-    name: Test on Node.js ${{ matrix.node-version }}
 
     steps:
     - name: Checkout code
@@ -28,14 +22,11 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-        cache: 'pnpm'
 
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 8
+    - name: Install pnpm manually
+      run: npm install -g pnpm
 
-    - name: Verify pnpm version
+    - name: Verify pnpm
       run: pnpm --version
 
     - name: Install dependencies
