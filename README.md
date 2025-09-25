@@ -1,5 +1,7 @@
 # Node.js Energy & CO₂ Agent
 
+![Node.js CI](https://github.com/ben-sentenac/NodeImpact/actions/workflows/nodejs.yml/badge.svg)
+
 Un **agent Node.js** pour mesurer :
 
 -  **Énergie CPU/SoC** (via RAPL ou modèle empirique)
