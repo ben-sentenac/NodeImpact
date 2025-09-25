@@ -5,7 +5,7 @@ import RaplReader from '../../src/sensors/rapl_reader.js';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { clampDt } from '../../src/lib/cpu_utils.js';
-import { nowNs,setEnergy,createRaplPackages } from '../test-utils.js';
+import { nowNs, setEnergy, createRaplPackages } from '../test-utils.js';
 
 
 
@@ -14,17 +14,19 @@ let tmp;
 let pkgs = [];
 
 
-beforeEach(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'rapl-test-'));
-    pkgs = [];
-
-});
-
-afterEach(async () => {
-    await rm(tmp, { force: true, recursive: true });
-});
 
 test('RAPL READER TEST SUITE', async (t) => {
+
+    beforeEach(async () => {
+        tmp = await mkdtemp(path.join(os.tmpdir(), 'rapl-test-'));
+        pkgs = [];
+
+    });
+
+    afterEach(async () => {
+        await rm(tmp, { force: true, recursive: true });
+    });
+
 
     await t.test('PRIME:first tick should return the right prime value', async () => {
         const pkg0 = await createRaplPackages(tmp, 'intel-rapl:0', { name: 'package-0', energy: 1_000_000n, maxRange: 65_532_610_987n });

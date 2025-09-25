@@ -10,22 +10,26 @@ import { cpus } from 'node:os';
 let cpuInfoFile = null;
 let statFile = null;
 let temp;
-beforeEach(async () => {
-    // on crée un répertoire temporaire pour stocker les fichiers cpuinfo et stat
-    // on nome ce répertoire avec un timestamp pour éviter les collisions d'ecriture
-    // ou de lecture
-    // sinon {concurrency:1} dans les tests
-    temp = path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`);
-    await mkdir(temp, { recursive: true });
-    cpuInfoFile = await createCpuInfo(temp);
-    statFile = await createStat(temp);
-});
 
-afterEach(async () => {
-    await rm(temp, { force: true, recursive: true });
-});
+
 
 test('CPU PROFILER TEST SUITE', async (t) => {
+
+    beforeEach(async () => {
+        // on crée un répertoire temporaire pour stocker les fichiers cpuinfo et stat
+        // on nome ce répertoire avec un timestamp pour éviter les collisions d'ecriture
+        // ou de lecture
+        // sinon {concurrency:1} dans les tests
+        temp = path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`);
+        await mkdir(temp, { recursive: true });
+        cpuInfoFile = await createCpuInfo(temp);
+        statFile = await createStat(temp);
+    });
+
+    afterEach(async (t) => {
+        t.diagnostic(`Erasing ${temp}`);
+        await rm(temp, { force: true, recursive: true });
+    });
 
     await t.test('must parse /proc/cpuinfo', async () => {
         const profiler = new SystemCpuProfiler({ cpuInfo: cpuInfoFile });
