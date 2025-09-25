@@ -1,9 +1,10 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import process from 'node:process';
 import path from 'node:path';
 import SystemCpuProfiler from '../../src/sensors/cpu.js';
 import { mkdir, rm, writeFile, } from 'node:fs/promises';
-import { FIXTURE_PATH, makeTempDir, createCpuInfo, createStat } from '../test-utils.js';
+import { FIXTURE_PATH, makeTempDir, createCpuInfo, createStat, createStatUnderControl } from '../test-utils.js';
 import { cpus } from 'node:os';
 
 
@@ -23,7 +24,12 @@ test('CPU PROFILER TEST SUITE', async (t) => {
         temp = path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`);
         await mkdir(temp, { recursive: true });
         cpuInfoFile = await createCpuInfo(temp);
-        statFile = await createStat(temp);
+        if(!process.env.CI) {
+            statFile = await createStat(temp);
+        } else {
+            statFile = await createStatUnderControl(temp,{user: 1100, system: 600, idle: 2200});
+        }
+        
     });
 
     afterEach(async (t) => {
@@ -58,7 +64,9 @@ test('CPU PROFILER TEST SUITE', async (t) => {
 
     });
 
+
     await t.test('must parse /proc/stat', async () => {
+
         const profiler = new SystemCpuProfiler({ stat: statFile });
 
         const snap1 = profiler.getLastSnapshot();
@@ -80,7 +88,12 @@ test('CPU PROFILER TEST SUITE', async (t) => {
 
         //regenère le fichier stat
         await rm(statFile);
-        statFile = await createStat(temp);
+        if(!process.env.CI) {
+            statFile = await createStat(temp);
+        } else {
+            statFile = await createStatUnderControl(temp,{user: 1500, system: 1000, idle: 2500})
+        }
+        
         const stat2 = await profiler.stat();
 
         assert.ok(stat2.ok === true);
