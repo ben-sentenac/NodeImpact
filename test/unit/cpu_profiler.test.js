@@ -4,7 +4,7 @@ import process from 'node:process';
 import path from 'node:path';
 import SystemCpuProfiler from '../../src/sensors/cpu.js';
 import { mkdir, rm, writeFile, } from 'node:fs/promises';
-import { FIXTURE_PATH, makeTempDir, createCpuInfo, createStat, createStatUnderControl } from '../test-utils.js';
+import { FIXTURE_PATH, makeTempDir, createCpuInfo, createStat, createStatUnderControl,cleanup } from '../test-utils.js';
 import { cpus } from 'node:os';
 
 
@@ -34,7 +34,7 @@ test('CPU PROFILER TEST SUITE', async (t) => {
 
     afterEach(async (t) => {
         t.diagnostic(`Erasing ${temp}`);
-        await rm(temp, { force: true, recursive: true });
+        await cleanup(temp);
     });
 
     await t.test('must parse /proc/cpuinfo', async () => {

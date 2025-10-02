@@ -1,5 +1,5 @@
 import path,{ resolve,join } from 'path';
-import { mkdir,open,mkdtemp,writeFile} from 'fs/promises';
+import { mkdir,open,mkdtemp,writeFile,rm} from 'fs/promises';
 import { pipeline } from 'stream/promises';
 import { tmpdir } from 'node:os';
 
@@ -70,10 +70,43 @@ async function createCpuInfo(outDir,source = '/proc/cpuinfo') {
     return await createFakeFile(source,dest);
 }
 
+async function createFakePidStatFile(pid, outDir, content) {
+    const dest = path.join(outDir, String(pid), 'stat');
+    return await createFakeFile(null,dest,content);
+}
+
+function generateStatSample({ pid,utime, stime, starttime, delay, hz = 100 }) {
+  const delta_ticks = Math.round(delay * hz);
+  const new_utime = utime + Math.floor(delta_ticks / 2);
+  const new_stime = stime + Math.ceil(delta_ticks / 2);
+
+  const fields = [
+    pid, '(node)', 'S', 52710, 52711, 52710, 34819, 52711, 4194560,
+    18391, 0, 1, 0,
+    new_utime, new_stime, 0, 0, 20, 0, 11, 0,
+    starttime, 1278586880, 17245, '18446744073709551615', 1, 1, 0, 0, 0, 0, 0,
+    16781312, 134235650, 0, 0, 0, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+  ];
+
+  return fields.join(' ');
+}
+
 async function createStat(outDir, source = '/proc/stat') {
     const dest = outDir ? path.join(outDir,'stat'): path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`, 'stat');
 
     return await createFakeFile(source,dest);
+}
+
+async function createFakePidFile(dir, pid) {
+    const pidFilePath = path.join(dir, 'test.pid');
+    await writeFile(pidFilePath, `${pid}\n`, 'utf-8');
+    return pidFilePath;
+}
+
+async function cleanup(testDir) {
+    if (testDir) {
+        await rm(testDir, { force: true, recursive: true });
+    }
 }
 
 
@@ -116,5 +149,10 @@ export {
     createCpuInfo,
     createStat,
     createFakeFile,
-    createStatUnderControl
+    createStatUnderControl,
+    createFakePidStatFile,
+    generateStatSample,
+    createFakePidFile,
+    cleanup
+    
 }

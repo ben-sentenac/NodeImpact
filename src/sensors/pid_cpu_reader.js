@@ -8,10 +8,58 @@ const STAT_FIELDS_NAME = [
     'processor', 'rt_priority', 'policy', 'delayacct_blkio_ticks', 'guest_time',
     'cguest_time', 'start_data', 'end_data', 'start_brk', 'arg_start', 'arg_end',
     'env_start', 'env_end', 'exit_code'
-]
-class PIDResolver {
-    //todo
-}
+];
+
+/**
+ * Lit et parse le fichier /proc/[pid]/stat pour un pid donné.
+ * Fournit des mesures CPU pour ce process.
+ * 
+ * see: https://man7.org/linux                          
+ * /proc/[pid]/stat
+ * 
+ * Utile pour monitorer l'usage CPU d'un process spécifique.
+ * 
+ * Usage:
+ * const reader = new PidCpuReader({pid:12345, hz:100});
+ * setInterval(async () => {
+ *    console.log(await reader.sample());
+ * }, 3000);
+ * 
+ * @class PidCpuReader
+ * @param {Object} options
+ * @param {number} options.pid - PID du process à monitorer (obligatoire).
+ * @param {number} [options.hz=100] - Nombre de ticks CPU par seconde (valeur par défaut 100).
+ * @param {string} [options.statPath=null] - Chemin alternatif vers le fichier stat (optionnel, par défaut /proc/[pid]/stat).
+ * 
+ * @throws {Error} Si le pid n'est pas fourni ou si le statPath ne correspond pas au pid.
+ * 
+ * Méthodes:
+ * - async sample():
+ *   - Lit et parse le fichier stat.
+ *   - Calcule le delta de ticks CPU depuis le dernier appel.
+ *   - Détecte si le process a redémarré (changement de starttime).
+ *   - Retourne un objet avec les mesures CPU et l'état du process.
+ * 
+ * Retourne un objet avec la structure suivante:
+ * {
+ *   ok: boolean,               // true si la lecture et le parsing ont réussi, false sinon
+ *   pid: number,              // PID du process monitoré
+ *   app_cpu_s: number,        // ΔCPU de l’app sur l’intervalle (en secondes)                                      
+ *  pid_restarted: boolean,   // true si starttime a changé sur ce tick 
+ *  ticks: {                   // Informations de debug sur les ticks CPU
+ *   now: number,            // Total des ticks CPU du process au moment de l'échantillonnage
+ *  delta: number           // Delta des ticks CPU depuis le dernier échantillonnage
+ *  },
+ * 
+ *  error: {                  // Présent uniquement si ok est false
+ *  code: string,         // Code d'erreur (ex: 'ENOENT' si le fichier n'existe pas)
+ * message: string       // Message d'erreur détaillé
+ * 
+ * },
+ * timestamp: string        // Timestamp ISO de l'échantillonnage
+ * }
+ * 
+ */
 
 export default class PidCpuReader {
     constructor({ pid, hz = 100, statPath = null }) {
@@ -30,7 +78,6 @@ export default class PidCpuReader {
             }
         }
         this.pidFile = statPath || `/proc/${this.state.pid}/stat`;
-        console.log(this.pidFile);
     }
 
 
@@ -86,7 +133,7 @@ export default class PidCpuReader {
     }
 
     async getPidStat() {
-        return await this.#parse(this.pidFile);
+        return await this.#parse();
     }
 
     /**
@@ -97,7 +144,7 @@ export default class PidCpuReader {
 
         const timestamp = new Date().toISOString();
 
-        const pidStat = await this.#parse(this.pidFile);
+        const pidStat = await this.#parse();
 
 
         if (!pidStat.ok) {
@@ -142,7 +189,7 @@ export default class PidCpuReader {
                 app_cpu_s: 0,
                 pid_restarted: true,
                 ticks: { now: app_ticks_now, delta: 0 },
-                timestamp: ts
+                timestamp
             }
         }
 
@@ -157,7 +204,7 @@ export default class PidCpuReader {
         return {
             ok: true,
             pid,
-            app_cpu_s, // ΔCPU de l’app sur l’intervalle (en secondes),
+            app_cpu_s:app_cpu_seconds, // ΔCPU de l’app sur l’intervalle (en secondes),
             pid_restarted:false,     // true si starttime a changé sur ce tick
             ticks: {
                 now: this.state.last_app_ticks,
@@ -169,10 +216,13 @@ export default class PidCpuReader {
     }
 }
 
+/*
 const reader = new PidCpuReader({pid:25041});
 
 
 setInterval(async () => {
     console.log(await reader.sample());
 },3000);
+
+*/
 

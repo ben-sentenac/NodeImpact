@@ -1,7 +1,7 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { FIXTURE_PATH, createStatUnderControl, nowNs as generateNowNs } from '../test-utils.js';
+import { FIXTURE_PATH, cleanup, createStatUnderControl, nowNs as generateNowNs } from '../test-utils.js';
 import { rm, mkdir } from 'node:fs/promises';
 import HostCpuReader from '../../src/sensors/host_cpu_reader.js';
 import SystemCpuProfiler from '../../src/sensors/cpu.js';
@@ -23,10 +23,9 @@ test('HOST CPU READER TEST SUITE', async (t) => {
 
     afterEach(async (t) => {
         t.diagnostic(`Erasing ${temp}`);
-        await rm(temp, { force: true, recursive: true });
+        await cleanup(temp);
     });
     await t.test('must read /proc/stat and return cpu usage', async () => {
-        t.diagnostic(`Using stat file: ${statFile}`);
         const profiler = new SystemCpuProfiler({ stat: statFile });
         const reader = new HostCpuReader({ profiler, hz: 100 });
 
@@ -45,8 +44,6 @@ test('HOST CPU READER TEST SUITE', async (t) => {
 
         const nowNs2 = nowNs + generateNowNs(1.0); // 1 seconde plus tard
         const res2 = await reader.sample(nowNs2);
-
-        t.diagnostic(`Second sample: ${JSON.stringify(res2, null, 2)}`);
 
         assert.ok(res2.ok);
         // teste les bornes min / max
