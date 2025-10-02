@@ -5,7 +5,7 @@ import RaplReader from '../../src/sensors/rapl_reader.js';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { clampDt } from '../../src/lib/cpu_utils.js';
-import { nowNs, setEnergy, createRaplPackages } from '../test-utils.js';
+import { nowNs, setEnergy, createRaplPackages, cleanup } from '../test-utils.js';
 
 
 
@@ -24,7 +24,8 @@ test('RAPL READER TEST SUITE', async (t) => {
     });
 
     afterEach(async () => {
-        await rm(tmp, { force: true, recursive: true });
+        await cleanup(tmp);
+        pkgs = [];
     });
 
 
