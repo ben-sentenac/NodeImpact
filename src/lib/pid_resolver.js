@@ -2,6 +2,8 @@ import { readFile } from "fs/promises";
 import { promisify } from "util";
 import { execFile } from "child_process";
 import {freezeDepth1, shallowFreeze } from "./utils.js";
+import { createLogger } from "./logger.js";
+import { Console } from "console";
 
 const execFileAsync = promisify(execFile);
 
@@ -117,7 +119,7 @@ async function readPidFromFile(path) {
     }
 }
 
-function normalizeOptions(options = {}) {
+function normalizeOptions(options) {
     //  Clone défensif AVANT toute normalisation
         const cloned = structuredClone(options);
      //  Normalisation sur la copie
@@ -147,19 +149,21 @@ function normalizeOptions(options = {}) {
 
 export default class PIDResolver {
     #options;
-
     constructor(options = {}) {
 
-        if (!options.strategy || !STRATEGIES.has(options.strategy)) {
+        //extraire logger des options car structuredClone ne gere pas les fonctions
+        const {logger,logLevel,..._options} = options ?? {};
+
+        if (!_options.strategy || !STRATEGIES.has(_options.strategy)) {
             throw new Error('Invalid or missing strategy option <strategy>');
         }
+       
+        this.#options = normalizeOptions(_options);
 
-        //  Clone défensif AVANT toute normalisation
-        //const cloned = structuredClone(options);
-    
-        this.#options = normalizeOptions(options);
+        this.log = createLogger(options.logger,logLevel || 'warn');
 
         Object.freeze(this.#options); // interne figé
+
     }
 
     get options() {
@@ -199,25 +203,31 @@ export default class PIDResolver {
 
 
     async #resolveFromFile() {
-
         const { file, strict, constraints, returnInfo, timeoutMs } = this.#options;
+        this.log.debug('resolve.start', { strategy: 'file' });
 
         if (!file || typeof file !== 'object' || !file.path || typeof file.path !== 'string') {
             return err('invalid_file_options');
         }
         //1) lire PID
+        this.log.debug('file.read.start', { path: file.path });
         const response = await readPidFromFile(file.path);
         if (!response.ok) return response;
         const pid = response.pid;
+        this.log.debug('file.read.ok', { path: file.path, pid });
 
         //2) vivacité
         if (!isPidAlive(pid)) {
+            this.log.error('file.liveness.notAlive', { pid });
             return err('pid_not_alive', { pid });
         }
         //3) contraintes t0
         const first = await this.#validateConstraints(pid);
-        if (!first.ok) return first;
-
+        if (!first.ok) {
+             this.log.warn('constraints.fail', { pid, error: first.error });
+             return first;
+        }
+        this.log.debug('constraints.ok', { pid });
         //4) strict t1
 
         const delayMs = getStrictDelay(strict);
@@ -227,17 +237,24 @@ export default class PIDResolver {
             await sleep(delayMs);
             if (!hasConstraints(constraints)) {
                 if (!isPidAlive(pid)) {
+                    this.log.error('strict.fail', { pid, reason: 'notAlive' });
                     return err('strict_verification_failed');
                 }
+                this.log.debug('strict.ok', { pid });
             } else {
                 second = await this.#validateConstraints(pid);
-                if (!second.ok) return err('strict_verification_failed', { pid, reason: second.error });
+                if (!second.ok) {
+                      this.log.error('strict.fail', { pid, reason: second.error });
+                      return err('strict_verification_failed', { pid, reason: second.error });
+                } 
                 //on compare first et second
                 const a = first.info, b = second.info
                 if (!a || !b || a.user !== b.user || a.comm !== b.comm || a.args !== b.args) {
+                    this.log.error('strict.changed', { pid });
                     return err('strict_identity_changed');
                 }
             }
+            this.log.debug('strict.ok', { pid });
         }
 
         //final
@@ -269,7 +286,7 @@ export default class PIDResolver {
     async resolve() {
         switch (this.#options.strategy) {
             case 'file':
-                return this.#resolveFromFile();
+                return await this.#resolveFromFile();
             case 'env':
                 return this.#resolveFromEnv();
             case 'command':

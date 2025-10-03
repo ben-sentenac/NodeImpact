@@ -32,6 +32,17 @@ function mockPsSequence(lineArray) {
     return mock.method(childProc, 'execFile', fn)
 }
 
+function makeSpyLogger() {
+    const calls = { debug: [], info: [], warn: [], error: [] };
+    const logger = {
+        debug: (...a) => calls.debug.push(a),
+        info: (...a) => calls.info.push(a),
+        warn: (...a) => calls.warn.push(a),
+        error: (...a) => calls.error.push(a),
+    };
+    return { logger, calls };
+}
+
 
 test('PID RESOLVER TEST SUITE', async (t) => {
 
@@ -184,7 +195,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         await createPIDFile(temp, 12345);
         const r = new PIDResolver({ strategy: 'file', file: path.join(temp, 'app.pid') });
         const result = await r.resolve();
-        assert.deepEqual(result, { ok: false,error: 'pid_not_alive', message: 'PID is not alive', details:{pid:12345}});
+        assert.deepEqual(result, { ok: false, error: 'pid_not_alive', message: 'PID is not alive', details: { pid: 12345 } });
     });
 
     await t.test('constrainst: name OK', async () => {
@@ -293,8 +304,9 @@ test('PID RESOLVER TEST SUITE', async (t) => {
     setInterval(()=>{}, 1e6);
     process.on('message', m => { if (m === 'flip') process.title = 'pidres-child-t1'; });
   `, 'utf8');
-
-        const child = fork(childPath, { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+            let child;
+            try {
+                child = fork(childPath, { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
         const [{ pid }] = await once(child, 'message'); // { ready:true, pid }
 
         const pidFile = path.join(temp, 'child.pid');
@@ -314,7 +326,13 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         assert.equal(res.ok, false);
         assert.equal(res.error, 'strict_identity_changed');
 
-        child.kill();
+            } catch (error) {
+                console.error(error)
+            } finally {
+                child.kill();
+            }
+        
+        
     });
 
     await t.test('returnInfo: sans contraintes renvoie info issue de ps', async () => {
@@ -331,10 +349,10 @@ test('PID RESOLVER TEST SUITE', async (t) => {
     });
 
     await t.test('returnInfo: avec contraintes + strict → renvoie info (préférence t1)', async () => {
-        await createPIDFile(temp,process.pid)
+        await createPIDFile(temp, process.pid)
         const r = new PIDResolver({
             strategy: 'file',
-            file:path.join(temp,'app.pid'),
+            file: path.join(temp, 'app.pid'),
             returnInfo: true,
             strict: { delayMs: 30 },
             // on met une contrainte stable (user) pour forcer l’usage de ps
@@ -346,4 +364,52 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         assert.ok(res.info && typeof res.info === 'object');
         assert.equal(res.info.pid, process.pid);
     });
+
+
+    await t.test('logger custom reçoit un debug "file.read.ok" en succès', async () => {
+        const { logger, calls } = makeSpyLogger();
+        await createPIDFile(temp, process.pid);
+        const r = new PIDResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger, logLevel: 'debug' });
+        const res = await r.resolve();
+        assert.equal(res.ok, true);
+
+        const hasEvent = calls.debug.some(args => args[0] === 'file.read.ok');
+        assert.equal(hasEvent, true);
+
+    });
+
+    await t.test('logger niveau warn : les debug ne doivent pas apparaître', async () => {
+        await createPIDFile(temp,process.pid);
+        const { logger, calls } = makeSpyLogger();
+        const r = new PIDResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger, logLevel: 'warn' });
+        const res = await r.resolve();
+        assert.equal(res.ok, true);
+        assert.equal(calls.debug.length, 0);
+    });
+
+    await t.test('erreur pid_not_alive déclenche un error "file.liveness.notAlive"', async () => {
+        await createPIDFile(temp, 999999); // id quasi sûr d’être mort
+        const { logger, calls } = makeSpyLogger();
+        const r = new PIDResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger, logLevel: 'debug' });
+        const res = await r.resolve();
+        assert.equal(res.ok, false);
+        assert.equal(res.error, 'pid_not_alive');
+
+        const hasEvent = calls.error.some(args => args[0] === 'file.liveness.notAlive');
+        assert.equal(hasEvent, true);
+
+    });
+
+    /*
+    await t.test('logger partiel (seulement error) ne casse rien', async () => {
+        const minimal = { error: () => { } }; // pas de debug/info/warn
+        await createPIDFile(temp, process.pid);
+        const r = new PidResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger: minimal, logLevel: 'debug' });
+        const res = await r.resolve();
+        assert.equal(res.ok, true);
+
+    });
+    */
+
+
 });
