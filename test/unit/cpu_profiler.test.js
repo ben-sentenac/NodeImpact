@@ -10,7 +10,7 @@ import { cpus } from 'node:os';
 
 let cpuInfoFile = null;
 let statFile = null;
-let temp;
+export let temp;
 
 
 
