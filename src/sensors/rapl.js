@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { listDirs,accessReadable } from '../lib/utils';
+import { listDirs,accessReadable } from '../lib/utils.js';
 /**
  * energy_uj — Énergie consommée
 Ce fichier contient l’énergie totale consommée par un package CPU (ou un sous-domaine comme DRAM, GPU, etc.) depuis le démarrage.
@@ -59,7 +59,7 @@ export async function probeRapl(options = {}) {
 
   for (const entry of dirEntries) {
    
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) contin
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
 
     const dirname = entry.name;
 

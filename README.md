@@ -68,7 +68,7 @@ test rapide : sudo node bin/agent.js ...
 
 - [x] Boucle 1 Hz énergie (Δ energy_uj + wrap)
 
-- [ ] CPU share attribution
+- [x] CPU share attribution
 
 - [ ] Export Prometheus & NDJSON
 

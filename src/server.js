@@ -33,11 +33,13 @@ export async function buildServer({config, shared} = {}) {
             raplProbe = {status:'FAILED'};
         }
 
+        console.log(shared)
+
         const rapl = raplProbe;
         const raplStatus = rapl?.status || 'FAILED';
-        const host_energy = shared.energy || null;
-        const cpu_distribution = shared.cpu_last || null;
-        const app_energy = shared.power_app_last || null
+        const host_energy = shared.host_energy || null;
+        const cpu_distribution = shared.cpu_distribution || null;
+        const app_energy = shared.app_energy || null
 
         const status = worstCaseStatus([procStatus,raplStatus]);
         

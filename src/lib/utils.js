@@ -33,8 +33,62 @@ async function accessReadable(file) {
 }
 
 
+async function protectedDeepFreeze(obj,_seen = new WeakSet) {
+  if (obj === null || !typeof obj === 'object') return obj;
+  if(_seen.has(obj)) return obj;
+  _seen.add(obj);
+  if(Object.isFrozen(obj)) return obj;
+
+  const tag = Object.prototype.toString.call(obj);
+  //objet speciaux, on fige en surface;
+  if(
+    tag === '[object Date]' || 
+    tag === '[object RegExp]' || 
+    tag === '[object Map]' || 
+    tag =='[object Set]' ||
+     typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(obj)
+  ) {
+    Object.freeze(obj);
+    return obj;
+  }
+
+  Object.freeze(obj);
+  for(const key of Object.keys(obj)) {
+    const value = obj[key];
+    // descend que dans les vrais objets/fonctions
+    if(value && (typeof value ==='object' || typeof value === 'function')) {
+      protectedDeepFreeze(value,_seen);
+    }
+  }
+  return obj;
+}
+
+
+function freezeDepth1(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (!Object.isFrozen(obj)) Object.freeze(obj);
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    const proto = v && typeof v === 'object' ? Object.getPrototypeOf(v) : null;
+    const isPojo = proto === Object.prototype || proto === null || Array.isArray(v);
+    if (v && isPojo && !Object.isFrozen(v)) Object.freeze(v);
+  }
+  return obj;
+}
+
+function shallowFreeze(obj) {
+   if (obj && typeof obj === 'object' && !Object.isFrozen(obj)) {
+    Object.freeze(obj);
+   };
+   return obj;
+}
+
+
 export {
     reasonFromCode,
     listDirs,
-    accessReadable
+    accessReadable,
+    protectedDeepFreeze,
+    shallowFreeze,
+    freezeDepth1
 }

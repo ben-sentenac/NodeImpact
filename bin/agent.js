@@ -24,6 +24,8 @@ try {
 
 const pid = Number(process.argv.slice(2)[0]) || null;
 
+console.log('pid',pid);
+
 const PORT = Number(config?.export?.http?.port ?? 9465);
 const HOST = config?.export?.http?.listen ?? '0.0.0.0';
 
