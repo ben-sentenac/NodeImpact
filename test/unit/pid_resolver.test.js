@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import PIDResolver from '../../src/lib/pid_resolver.js';
+import { PIDResolver } from '../../src/lib/pid_resolver.js';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { FIXTURE_PATH } from '../test-utils.js';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import { once } from 'node:events';
 
 
 
-let temp; let pidFile;
+let temp;
 
 
 async function createPIDFile(dir, pid) {
@@ -21,16 +21,6 @@ async function createPIDFile(dir, pid) {
     return await writeFile(filePath, String(pid), 'utf-8');
 }
 
-// utilitaire pour simuler deux sorties ps différentes
-
-function mockPsSequence(lineArray) {
-    let i = 0;
-    const fn = (file, args, opts, cb) => {
-        const out = lineArray[Math.min(i++, lineArray.length - 1)];
-        cb(null, out, '')
-    }
-    return mock.method(childProc, 'execFile', fn)
-}
 
 function makeSpyLogger() {
     const calls = { debug: [], info: [], warn: [], error: [] };

@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import { promisify } from "util";
 import { execFile } from "child_process";
-import {freezeDepth1, shallowFreeze } from "./utils.js";
+import { freezeDepth1, shallowFreeze } from "./utils.js";
 import { createLogger } from "./logger.js";
 import { Console } from "console";
 
@@ -21,6 +21,10 @@ const ERROR_MESSAGES = {
     strict_identity_changed: 'Process identity (user/comm/args) changed between checks',
     file_read_error: 'Failed to read PID file',
     not_implemented: 'Strategy not implemented',
+    tool_unavailable: 'Command not found',
+    cmd_timeout: 'Command timed out',
+    cmd_exit: 'Command exited with non-zero code',
+    cmd_failed: 'Command failed',
 };
 
 Object.freeze(ERROR_MESSAGES);
@@ -58,13 +62,38 @@ function isPidAlive(pid) {
     }
 }
 
-async function getProcessInfo(pid, timeoutMs) {
+export async function runCmd(command, args = [], { timeoutMs } = {}, log) {
+    log?.debug('cmd.start', { command, args, timeoutMs });
+    try {
+        const { stdout = '', stderr = '' } = await execFileAsync(command, args, {timeout:timeoutMs});
+        log?.debug('cmd.ok', { command, stdoutLen: String(stdout).length, stderrLen: String(stderr).length });
+        return { ok: true, stdout: String(stdout), stderr: String(stderr) };
+    } catch (e) {
+        if (e?.code === 'ENOENT') {
+            log?.error('cmd.fail', { command, reason: 'ENOENT' });
+            return { ok: false, error: 'tool_unavailable', message: ERROR_MESSAGES.tool_unavailable, details: { command } };
+        }
+        if (e?.killed || e?.signal === 'SIGTERM' || e?.code === 'ETIMEDOUT') {
+            log?.error('cmd.fail', { command, reason: 'timeout' });
+            return { ok: false, error: 'cmd_timeout', message: ERROR_MESSAGES.cmd_timeout, details: { command, timeoutMs } };
+        }
+        if (typeof e?.code === 'number') {
+            log?.error('cmd.fail', { command, reason: 'exit', code: e.code });
+            return { ok: false, error: 'cmd_exit', message: ERROR_MESSAGES.cmd_exit, details: { command, code: e.code, stderr: String(e?.stderr || '') } };
+        }
+        log?.error('cmd.fail', { command, reason: 'unknown' });
+        return { ok: false, error: 'cmd_failed', message: ERROR_MESSAGES.cmd_failed, details: { command, message: e?.message } };
+    }
+}
+
+async function getProcessInfo(pid, timeoutMs,log) {
     // TODO:
     // utiliser ps
     // ps -o user=,comm=,args= -p <pid>
     try {
-        const { stdout } = await execFileAsync('ps', ['-o', 'user=,comm=,args=', '-p', String(pid)], { timeout: timeoutMs });
-        const psInfo = parsePsLine(stdout);
+        const res = await runCmd('ps', ['-o', 'user=,comm=,args=', '-p', String(pid)], { timeout: timeoutMs },log);
+        if(!res.ok) return null;
+        const psInfo = parsePsLine(res.stdout);
         return psInfo ? { pid: Number(pid), ...psInfo } : null;
     } catch (error) {
         return null;
@@ -121,46 +150,46 @@ async function readPidFromFile(path) {
 
 function normalizeOptions(options) {
     //  Clone défensif AVANT toute normalisation
-        const cloned = structuredClone(options);
-     //  Normalisation sur la copie
+    const cloned = structuredClone(options);
+    //  Normalisation sur la copie
     if (typeof cloned.file === 'string') {
-            cloned.file = { path: cloned.file };
-        }
-        // validate constraints
-        const rawConstraints = (cloned.constraints && typeof cloned.constraints === 'object') ? cloned.constraints : {};
-        const cmdRegex = typeof rawConstraints.cmdRegex === 'string'
-            ? new RegExp(rawConstraints.cmdRegex)
-            : rawConstraints.cmdRegex instanceof RegExp
-                ? rawConstraints.cmdRegex
-                : undefined;
+        cloned.file = { path: cloned.file };
+    }
+    // validate constraints
+    const rawConstraints = (cloned.constraints && typeof cloned.constraints === 'object') ? cloned.constraints : {};
+    const cmdRegex = typeof rawConstraints.cmdRegex === 'string'
+        ? new RegExp(rawConstraints.cmdRegex)
+        : rawConstraints.cmdRegex instanceof RegExp
+            ? rawConstraints.cmdRegex
+            : undefined;
 
-                return {
-            strategy: cloned.strategy,
-            file: cloned.file ?? null,
-            // strict: Réduire le risque de réutilisation de PID entre la lecture 
-            // du fichier et la validation, en revalidant après un léger délai.
-            strict: cloned.strict ?? false,
-            ensureUnique: cloned.ensureUnique ?? false,
-            timeoutMs: (Number.isFinite(cloned.timeoutMs) && cloned.timeoutMs > 0) ? cloned.timeoutMs : DEFAULT.timeoutMs,
-            constraints: { ...rawConstraints, ...(cmdRegex ? { cmdRegex } : {}) },
-            returnInfo: cloned.returnInfo ?? false,
-        }
+    return {
+        strategy: cloned.strategy,
+        file: cloned.file ?? null,
+        // strict: Réduire le risque de réutilisation de PID entre la lecture 
+        // du fichier et la validation, en revalidant après un léger délai.
+        strict: cloned.strict ?? false,
+        ensureUnique: cloned.ensureUnique ?? false,
+        timeoutMs: (Number.isFinite(cloned.timeoutMs) && cloned.timeoutMs > 0) ? cloned.timeoutMs : DEFAULT.timeoutMs,
+        constraints: { ...rawConstraints, ...(cmdRegex ? { cmdRegex } : {}) },
+        returnInfo: cloned.returnInfo ?? false,
+    }
 }
 
-export default class PIDResolver {
+export  class PIDResolver {
     #options;
     constructor(options = {}) {
 
         //extraire logger des options car structuredClone ne gere pas les fonctions
-        const {logger,logLevel,..._options} = options ?? {};
+        const { logger, logLevel, ..._options } = options ?? {};
 
         if (!_options.strategy || !STRATEGIES.has(_options.strategy)) {
             throw new Error('Invalid or missing strategy option <strategy>');
         }
-       
+
         this.#options = normalizeOptions(_options);
 
-        this.log = createLogger(options.logger,logLevel || 'warn');
+        this.log = createLogger(options.logger, logLevel || 'warn');
 
         Object.freeze(this.#options); // interne figé
 
@@ -179,15 +208,15 @@ export default class PIDResolver {
 
         if (!hasConstraints(constraints)) return ok({ info: null });
 
-        const psInfos = await getProcessInfo(pid, timeoutMs);
+        const psInfos = await getProcessInfo(pid, timeoutMs,this.log);
 
         if (!psInfos) {
             return err('process_info_not_found', { pid });
         }
         //a partir de node 24 comm = 'mainTrhread' pas 'node'
-        if(constraints.name) {
+        if (constraints.name) {
             const expectedName = Array.isArray(constraints.name) ? constraints.name : [constraints.name];
-            if(!expectedName.includes(psInfos.comm)) {
+            if (!expectedName.includes(psInfos.comm)) {
                 return err('constraint_name_mismatch');
             }
         }
@@ -227,8 +256,8 @@ export default class PIDResolver {
         //3) contraintes t0
         const first = await this.#validateConstraints(pid);
         if (!first.ok) {
-             this.log.warn('constraints.fail', { pid, error: first.error });
-             return first;
+            this.log.warn('constraints.fail', { pid, error: first.error });
+            return first;
         }
         this.log.debug('constraints.ok', { pid });
         //4) strict t1
@@ -247,9 +276,9 @@ export default class PIDResolver {
             } else {
                 second = await this.#validateConstraints(pid);
                 if (!second.ok) {
-                      this.log.error('strict.fail', { pid, reason: second.error });
-                      return err('strict_verification_failed', { pid, reason: second.error });
-                } 
+                    this.log.error('strict.fail', { pid, reason: second.error });
+                    return err('strict_verification_failed', { pid, reason: second.error });
+                }
                 //on compare first et second
                 const a = first.info, b = second.info
                 if (!a || !b || a.user !== b.user || a.comm !== b.comm || a.args !== b.args) {
@@ -264,9 +293,9 @@ export default class PIDResolver {
         if (returnInfo) {
             let info = null;
             if (hasConstraints(constraints)) {
-                info = (second && second.info) || first && first.info || await getProcessInfo(pid, timeoutMs);
+                info = (second && second.info) || first && first.info || await getProcessInfo(pid, timeoutMs,this.log);
             } else {
-                info = await getProcessInfo(pid, timeoutMs);
+                info = await getProcessInfo(pid, timeoutMs,this.log);
             }
             return ok({ pid, info })
         }
