@@ -198,13 +198,15 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         assert.deepEqual(result, { ok: false, error: 'pid_not_alive', message: 'PID is not alive', details: { pid: 12345 } });
     });
 
+    const constrainstName = process.version.startsWith('v24') ? 'MainThread' : 'node'
+
     await t.test('constrainst: name OK', async () => {
         await createPIDFile(temp, process.pid);
         const r = new PIDResolver({
             strategy: 'file',
             file: path.join(temp, 'app.pid'),
             constraints: {
-                name: 'node'
+                name: constrainstName
             }
         });
         const result = await r.resolve();
@@ -230,7 +232,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
             strategy: 'file',
             file: path.join(temp, 'app.pid'),
             constraints: {
-                name: 'node',
+                name: constrainstName,
                 cmdRegex: new RegExp(path.basename(import.meta.filename))
             }
         });
@@ -242,7 +244,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
             strategy: 'file',
             file: path.join(temp, 'app.pid'),
             constraints: {
-                name: 'node',
+                name: constrainstName,
                 cmdRegex: /pid_\.test\.js/
             }
         });
@@ -254,7 +256,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
             strategy: 'file',
             file: path.join(temp, 'app.pid'),
             constraints: {
-                name: 'node',
+                name: constrainstName,
                 user: process.env.USER
             }
         });
@@ -267,7 +269,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
             strategy: 'file',
             file: path.join(temp, 'app.pid'),
             constraints: {
-                name: 'node',
+                name: constrainstName,
                 user: 'jhon'
             }
         });
@@ -281,7 +283,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
             file: path.join(temp, 'app.pid'),
             strict: { delayMs: 1000 },
             constraints: {
-                name: 'node',
+                name: constrainstName,
                 cmdRegex: new RegExp(path.basename(import.meta.filename)),
                 user: process.env.USER
             }

@@ -184,9 +184,12 @@ export default class PIDResolver {
         if (!psInfos) {
             return err('process_info_not_found', { pid });
         }
-
-        if (constraints.name && psInfos.comm !== constraints.name) {
-            return err('constraint_name_mismatch');
+        //a partir de node 24 comm = 'mainTrhread' pas 'node'
+        if(constraints.name) {
+            const expectedName = Array.isArray(constraints.name) ? constraints.name : [constraints.name];
+            if(!expectedName.includes(psInfos.comm)) {
+                return err('constraint_name_mismatch');
+            }
         }
 
         if (constraints.cmdRegex && !constraints.cmdRegex.test(psInfos.args)) {
