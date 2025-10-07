@@ -1,8 +1,6 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
-import { FIXTURE_PATH, cleanup, createStatUnderControl, nowNs as generateNowNs } from '../test-utils.js';
-import { rm, mkdir } from 'node:fs/promises';
+import { cleanup, createStatUnderControl, nowNs as generateNowNs, makeTempDir } from '../test-utils.js';
 import HostCpuReader from '../../src/sensors/host_cpu_reader.js';
 import SystemCpuProfiler from '../../src/sensors/cpu.js';
 import { clampDt } from '../../src/lib/cpu_utils.js';
@@ -14,10 +12,7 @@ let temp;
 test('HOST CPU READER TEST SUITE', async (t) => {
 
     beforeEach(async () => {
-        // on crée un répertoire temporaire pour stocker les fichiers cpuinfo et stat
-        // on nome ce répertoire avec un timestamp pour éviter les collisions
-        temp = path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`);
-        await mkdir(temp, { recursive: true });
+        temp = await makeTempDir('proc');
         statFile = await createStatUnderControl(temp, { user: 1000, system: 500, idle: 2000 });
     });
 

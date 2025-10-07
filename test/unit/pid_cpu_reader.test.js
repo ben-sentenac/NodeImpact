@@ -1,29 +1,23 @@
-import test, { after, afterEach, beforeEach } from 'node:test';
+import test, { afterEach, beforeEach } from 'node:test';
 import assert from "node:assert/strict";
 import path from "node:path";
-import process from "node:process";
 import PidCpuReader from '../../src/sensors/pid_cpu_reader.js';
-import { FIXTURE_PATH, cleanup, createFakePidStatFile, generateStatSample } from '../test-utils.js';
-import { mkdir, rm } from 'node:fs/promises';
+import { cleanup, createFakePidStatFile, generateStatSample, makeTempDir } from '../test-utils.js';
 
 let pid;
 let temp;
 let statPath;
 
 test('PidCpuReader Test Suite', async (t) => {
-    // Example test: check if PidCpuReader can be instantiated
 
     beforeEach(async () => {
-        // Runs before each test
-        temp = path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`);
-        pid = 25041; // Replace with a valid PID for testing
+        temp = await makeTempDir('proc');
+        pid = 25041;
         const statContent = generateStatSample({ pid, utime: 0, stime: 0, starttime: 9954766, delay: 0, hz: 100 });
         await createFakePidStatFile(pid, temp, statContent);
     });
 
     afterEach(async () => {
-        // Runs after all tests have completed  
-        // Clean up temporary files or directories if needed
         await cleanup(temp);
     });
 

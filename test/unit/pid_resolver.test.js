@@ -1,48 +1,23 @@
 import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { PIDResolver } from '../../src/lib/pid_resolver.js';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { FIXTURE_PATH } from '../test-utils.js';
+import { writeFile } from 'node:fs/promises';
+import { createPIDFile,makeSpyLogger,makeTempDir,cleanup } from '../test-utils.js';
 import path from 'node:path';
 import os from 'node:os';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-// Utilitaire pour créer un fichier temporaire, exécuter une fonction asynchrone, puis nettoyer
-
-
-
-
 
 let temp;
-
-
-async function createPIDFile(dir, pid) {
-    const filePath = path.join(dir, 'app.pid');
-    return await writeFile(filePath, String(pid), 'utf-8');
-}
-
-
-function makeSpyLogger() {
-    const calls = { debug: [], info: [], warn: [], error: [] };
-    const logger = {
-        debug: (...a) => calls.debug.push(a),
-        info: (...a) => calls.info.push(a),
-        warn: (...a) => calls.warn.push(a),
-        error: (...a) => calls.error.push(a),
-    };
-    return { logger, calls };
-}
-
 
 test('PID RESOLVER TEST SUITE', async (t) => {
 
     beforeEach(async () => {
-        temp = path.join(FIXTURE_PATH, `pidfile-${Date.now()}`);
-        await mkdir(temp, { recursive: true });
+        temp = await makeTempDir(`pidfile`);
     });
 
     afterEach(async () => {
-        await rm(temp, { force: true, recursive: true });
+        await cleanup(temp);
     });
 
     await t.test('doit exposer une API minimale', () => {

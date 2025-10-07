@@ -2,10 +2,9 @@ import assert from 'node:assert/strict';
 import test, { afterEach, beforeEach } from 'node:test';
 import path from 'node:path';
 import RaplReader from '../../src/sensors/rapl_reader.js';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { chmod } from 'node:fs/promises';
 import { clampDt } from '../../src/lib/cpu_utils.js';
-import { nowNs, setEnergy, createRaplPackages, cleanup } from '../test-utils.js';
+import { nowNs, setEnergy, createRaplPackages, cleanup, makeTempDir } from '../test-utils.js';
 
 
 
@@ -18,9 +17,8 @@ let pkgs = [];
 test('RAPL READER TEST SUITE', async (t) => {
 
     beforeEach(async () => {
-        tmp = await mkdtemp(path.join(os.tmpdir(), 'rapl-test-'));
+        tmp = await makeTempDir('rapl-test');
         pkgs = [];
-
     });
 
     afterEach(async () => {

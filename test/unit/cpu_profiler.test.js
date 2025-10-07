@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import process from 'node:process';
 import path from 'node:path';
 import SystemCpuProfiler from '../../src/sensors/cpu.js';
-import { mkdir, rm, writeFile, } from 'node:fs/promises';
-import { FIXTURE_PATH, makeTempDir, createCpuInfo, createStat, createStatUnderControl,cleanup } from '../test-utils.js';
+import { rm, writeFile, } from 'node:fs/promises';
+import { makeTempDir, createCpuInfo, createStat, createStatUnderControl,cleanup } from '../test-utils.js';
 import { cpus } from 'node:os';
 
 
@@ -17,12 +17,7 @@ export let temp;
 test('CPU PROFILER TEST SUITE', async (t) => {
 
     beforeEach(async () => {
-        // on crée un répertoire temporaire pour stocker les fichiers cpuinfo et stat
-        // on nome ce répertoire avec un timestamp pour éviter les collisions d'ecriture
-        // ou de lecture
-        // sinon {concurrency:1} dans les tests
-        temp = path.join(FIXTURE_PATH, `proc-${process.hrtime.bigint().toString()}`);
-        await mkdir(temp, { recursive: true });
+        temp = await makeTempDir('proc');
         cpuInfoFile = await createCpuInfo(temp);
         if(!process.env.CI) {
             statFile = await createStat(temp);
