@@ -17,26 +17,7 @@ Aider **développeurs et DevOps** à :
 - suivre l’empreinte carbone en temps réel,
 - détecter les saturations de l’event-loop.
 
----
-
-## Configuration
-L’agent lit son fichier de configuration JSON (validé par AJV).
-Exemple minimal :
-```json
-{
-  "agent": { "sampling": { "period_ms": 1000 }, "windows": ["60s"], "timezone": "UTC" },
-  "target": { "selector": { "mode": "pid", "pid": 12345 }, "eventloop_probe": { "enabled": false, "expected_interval_ms": 10, "ingest": { "transport": "uds", "uds_path": "/tmp/el.sock" } } },
-  "energy": { "sensors": { "rapl": { "enabled": true, "base_path": "/sys/class/powercap", "packages": [] }, "gpu": { "enabled": false } }, "idle_baseline_wh_per_min": 0 },
-  "attribution": { "mode": "cpu_share", "multifactor": { "enabled": false, "coefficients": { "w0":0,"w1":15,"w2":0,"w3":0.5,"w4":0.8 } } },
-  "carbon": { "source": { "type": "file", "file": "/etc/agent/carbon_intensity.csv" }, "zone": "FR", "default_kg_per_kwh": 0.25 },
-  "export": { "http": { "enabled": true, "listen": "0.0.0.0", "port": 9465, "endpoints": { "metrics": "/metrics", "snapshot": "/snapshot", "healthz": "/healthz", "ingest_eventloop": "/ingest/eventloop" } }, "file": { "ndjson_enabled": false, "path": "/tmp/metrics.ndjson", "rotate_mb": 50 } },
-  "logging": { "level": "info", "file": "/tmp/agent.log" },
-  "limits": { "max_rps_ingest": 200, "max_mem_mb": 100 }
-}
 ```
-Voir [config](docs/config.md)
- pour la référence complète.
-
 ## Lancer l’agent
 
 ```sh
@@ -58,7 +39,7 @@ Solutions :
 
 test rapide : sudo node bin/agent.js ...
 
-- prod recommandé : ajouter l’utilisateur à un groupe via udev (voir [config](docs/Cconfig.md) section 9)
+- prod recommandé : ajouter l’utilisateur à un groupe via udev.
 
 ## Roadmap (V1)
 
