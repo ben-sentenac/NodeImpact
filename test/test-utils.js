@@ -1,5 +1,5 @@
 import path, { resolve, join } from 'path';
-import { mkdir, open, mkdtemp, writeFile, rm } from 'fs/promises';
+import { mkdir, open, mkdtemp,readFile, writeFile, rm } from 'fs/promises';
 import { pipeline } from 'stream/promises';
 
 
@@ -14,27 +14,16 @@ async function makeTempDir(dir = 'tmp') {
 }
 
 async function createFakeFile(source, dest, content = null) {
-    if (content) {
-        await mkdir(path.dirname(dest), { recursive: true });
-        await writeFile(dest, content, 'utf-8');
-        return dest;
-    }
-    await mkdir(path.dirname(dest), { recursive: true });
+  await mkdir(path.dirname(dest), { recursive: true });
 
-    const srcFile = await open(source, 'r');
-    const destFile = await open(dest, 'w');
+  if (content !== null) {
+    await writeFile(dest, content, 'utf-8');
+    return dest;
+  }
 
-    try {
-        const srcStream = srcFile.createReadStream();
-        const destStream = destFile.createWriteStream();
-        await pipeline(srcStream, destStream);
-        return dest;
-    } catch (error) {
-        throw error;
-    } finally {
-        await srcFile.close();
-        await destFile.close();
-    }
+  const buffer = await readFile(source);
+  await writeFile(dest, buffer);
+  return dest;
 }
 
 async function createRaplPackages(baseDir, nodeName, { name = 'package-0', energy = 0n, maxRange = 0n }) {
