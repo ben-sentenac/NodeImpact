@@ -255,6 +255,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         });
 
         const result = await r.resolve();
+        console.log(result);
         assert.equal(result.ok, true);
     });
     await t.test('strict:KO si metadonnées changent entre t0 et t1', async () => {
