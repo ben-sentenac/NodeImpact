@@ -1,31 +1,54 @@
 import { readFile } from "fs/promises";
 import { promisify } from "util";
 import { execFile } from "child_process";
-import { freezeDepth1, shallowFreeze } from "./utils.js";
+import { freezeDepth1 } from "./utils.js";
 import { createLogger } from "./logger.js";
-import { Console } from "console";
 
 const execFileAsync = promisify(execFile);
 
 
-const ERROR_MESSAGES = {
-    invalid_file_options: 'Invalid file options: expected { file: { path: string } }',
-    no_pid_found: 'No PID found in file',
-    invalid_pid_in_file: 'Invalid PID in file',
-    pid_not_alive: 'PID is not alive',
-    process_info_not_found: 'Could not fetch process info (ps returned nothing)',
-    constraint_name_mismatch: 'Process name (comm) does not match the expected name',
-    constraint_cmd_mismatch: 'Process args do not match the expected pattern',
-    constraint_user_mismatch: 'Process user does not match the expected user',
-    strict_verification_failed: 'Strict verification failed on second check',
-    strict_identity_changed: 'Process identity (user/comm/args) changed between checks',
-    file_read_error: 'Failed to read PID file',
-    not_implemented: 'Strategy not implemented',
-    tool_unavailable: 'Command not found',
-    cmd_timeout: 'Command timed out',
-    cmd_exit: 'Command exited with non-zero code',
-    cmd_failed: 'Command failed',
-};
+const REGEX = {
+    splitPidUserCmdArgs: /^(\d+)\s+(\S+)\s+(\S+)(?:\s+(.*))?$/
+}
+
+export const ERROR_MESSAGES = Object.freeze({
+  // Fichier PID / stratégie file
+  invalid_file_options: 'Invalid file options: expected { file: { path: string } }',
+  no_pid_found: 'No PID found in file',
+  invalid_pid_in_file: 'Invalid PID in file',
+  file_read_error: 'Failed to read PID file',
+
+  // Vivacité / infos process
+  pid_not_alive: 'PID is not alive',
+  process_info_not_found: 'Could not fetch process info (ps returned nothing)',
+
+  // Contraintes
+  constraint_name_mismatch: 'Process name (comm) does not match the expected name',
+  constraint_cmd_mismatch: 'Process args do not match the expected pattern',
+  constraint_user_mismatch: 'Process user does not match the expected user',
+
+  // Mode strict
+  strict_verification_failed: 'Strict verification failed on second check',
+  strict_identity_changed: 'Process identity (user/comm/args) changed between checks',
+
+  // Stratégies non implémentées
+  not_implemented: 'Strategy not implemented',
+
+  // Exécutions de commandes (runCmd)
+  tool_unavailable: 'Command not found',
+  cmd_timeout: 'Command timed out',
+  cmd_exit: 'Command exited with non-zero code',
+  cmd_failed: 'Command failed',
+
+  // Stratégie command
+  invalid_command_options: 'Invalid command options: expected { command: { pattern } }',
+  no_match: 'No process matched the given command pattern',
+  multiple_matches: 'Multiple processes matched the pattern',
+
+  // (Optionnels / futurs)
+  invalid_port_options: 'Invalid port options: expected { port: { port: number } }',
+  invalid_env_options: 'Invalid env options: expected { env: { var: string } }',
+});
 
 Object.freeze(ERROR_MESSAGES);
 
@@ -65,7 +88,7 @@ function isPidAlive(pid) {
 export async function runCmd(command, args = [], { timeoutMs } = {}, log) {
     log?.debug('cmd.start', { command, args, timeoutMs });
     try {
-        const { stdout = '', stderr = '' } = await execFileAsync(command, args, {timeout:timeoutMs});
+        const { stdout = '', stderr = '' } = await execFileAsync(command, args, { timeout: timeoutMs });
         log?.debug('cmd.ok', { command, stdoutLen: String(stdout).length, stderrLen: String(stderr).length });
         return { ok: true, stdout: String(stdout), stderr: String(stderr) };
     } catch (e) {
@@ -86,13 +109,47 @@ export async function runCmd(command, args = [], { timeoutMs } = {}, log) {
     }
 }
 
-async function getProcessInfo(pid, timeoutMs,log) {
+export async function listProcesses(timeoutMs,log = null) {
+    log ? log.debug('start.listing.process'): null;
+    const response = await runCmd('ps', ['-eo', 'pid=,user=,comm=,args='], { timeoutMs });
+    if (!response.ok) return [];
+    const stdout = response.stdout.split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+            const match = line.match(REGEX.splitPidUserCmdArgs)
+            if (!match) return null;
+            const [, pid, user, comm, args] = match;
+            return {
+                pid: Number(pid),
+                user,
+                comm,
+                args
+            };
+        });
+    return stdout.filter(Boolean);
+}
+
+function buildMatcher(command) {
+    const { pattern, fullCommand, caseSensitive } = command;
+    if (pattern instanceof RegExp) {
+        return (p) => fullCommand ? pattern.test(p.args) : pattern.test(p.comm);
+    }
+    const needle = String(pattern);
+    const convertToLower = (n) => caseSensitive ? n : n.toLowerCase();
+    return (p) => {
+        const commands = convertToLower(fullCommand ? p.args : p.comm);
+        return commands.includes(convertToLower(needle), 0);
+    }
+}
+
+async function getProcessInfo(pid, timeoutMs, log) {
     // TODO:
     // utiliser ps
     // ps -o user=,comm=,args= -p <pid>
     try {
-        const res = await runCmd('ps', ['-o', 'user=,comm=,args=', '-p', String(pid)], { timeout: timeoutMs },log);
-        if(!res.ok) return null;
+        const res = await runCmd('ps', ['-o', 'user=,comm=,args=', '-p', String(pid)], { timeoutMs }, log);
+        if (!res.ok) return null;
         const psInfo = parsePsLine(res.stdout);
         return psInfo ? { pid: Number(pid), ...psInfo } : null;
     } catch (error) {
@@ -128,7 +185,7 @@ function getStrictDelay(strictOpt) {
     if (strictOpt && typeof strictOpt === 'object' && Number.isFinite(strictOpt.delayMs) && strictOpt.delayMs > 0) {
         return strictOpt.delayMs;
     }
-    return strictOpt ? 150 : 0;
+    return strictOpt ? DEFAULT.strictDelayMs : 0;
 }
 
 async function readPidFromFile(path) {
@@ -173,10 +230,11 @@ function normalizeOptions(options) {
         timeoutMs: (Number.isFinite(cloned.timeoutMs) && cloned.timeoutMs > 0) ? cloned.timeoutMs : DEFAULT.timeoutMs,
         constraints: { ...rawConstraints, ...(cmdRegex ? { cmdRegex } : {}) },
         returnInfo: cloned.returnInfo ?? false,
+        command: cloned.command ?? {}
     }
 }
 
-export  class PIDResolver {
+export class PIDResolver {
     #options;
     constructor(options = {}) {
 
@@ -208,7 +266,7 @@ export  class PIDResolver {
 
         if (!hasConstraints(constraints)) return ok({ info: null });
 
-        const psInfos = await getProcessInfo(pid, timeoutMs,this.log);
+        const psInfos = await getProcessInfo(pid, timeoutMs, this.log);
 
         if (!psInfos) {
             return err('process_info_not_found', { pid });
@@ -233,9 +291,37 @@ export  class PIDResolver {
 
     }
 
+    async revalidateConstraintsAtT1(first,pid,constraints) {
+        const delayMs = getStrictDelay(this.#options.strict);
+        let second = null;
+        if (delayMs > 0) {
+            await sleep(delayMs);
+            if (!hasConstraints(constraints)) {
+                if (!isPidAlive(pid)) {
+                    this.log.error('strict.fail', { pid, reason: 'notAlive' });
+                    return err('strict_verification_failed');
+                }
+                this.log.debug('strict.ok', { pid });
+            } else {
+                second = await this.#validateConstraints(pid);
+                if (!second.ok) {
+                    this.log.error('strict.fail', { pid, reason: second.error });
+                    return err('strict_verification_failed', { pid, reason: second.error });
+                }
+                //on compare first et second
+                const a = first.info, b = second.info
+                if (!a || !b || a.user !== b.user || a.comm !== b.comm || a.args !== b.args) {
+                    this.log.error('strict.changed', { pid });
+                    return err('strict_identity_changed');
+                }
+            }
+            this.log.debug('strict.ok', { pid });
+        }
+        return second;
+    }
 
     async #resolveFromFile() {
-        const { file, strict, constraints, returnInfo, timeoutMs } = this.#options;
+        const { file, constraints, returnInfo, timeoutMs } = this.#options;
         this.log.debug('resolve.start', { strategy: 'file' });
 
         if (!file || typeof file !== 'object' || !file.path || typeof file.path !== 'string') {
@@ -261,41 +347,14 @@ export  class PIDResolver {
         }
         this.log.debug('constraints.ok', { pid });
         //4) strict t1
-
-        const delayMs = getStrictDelay(strict);
-        let second = null;
-
-        if (delayMs > 0) {
-            await sleep(delayMs);
-            if (!hasConstraints(constraints)) {
-                if (!isPidAlive(pid)) {
-                    this.log.error('strict.fail', { pid, reason: 'notAlive' });
-                    return err('strict_verification_failed');
-                }
-                this.log.debug('strict.ok', { pid });
-            } else {
-                second = await this.#validateConstraints(pid);
-                if (!second.ok) {
-                    this.log.error('strict.fail', { pid, reason: second.error });
-                    return err('strict_verification_failed', { pid, reason: second.error });
-                }
-                //on compare first et second
-                const a = first.info, b = second.info
-                if (!a || !b || a.user !== b.user || a.comm !== b.comm || a.args !== b.args) {
-                    this.log.error('strict.changed', { pid });
-                    return err('strict_identity_changed');
-                }
-            }
-            this.log.debug('strict.ok', { pid });
-        }
-
-        //final
+        let second = await this.revalidateConstraintsAtT1(first,pid,constraints);
+        if (second && second.ok === false) return second;
         if (returnInfo) {
             let info = null;
             if (hasConstraints(constraints)) {
-                info = (second && second.info) || first && first.info || await getProcessInfo(pid, timeoutMs,this.log);
+                info = (second && second.info) || first && first.info || await getProcessInfo(pid, timeoutMs, this.log);
             } else {
-                info = await getProcessInfo(pid, timeoutMs,this.log);
+                info = await getProcessInfo(pid, timeoutMs, this.log);
             }
             return ok({ pid, info })
         }
@@ -308,7 +367,64 @@ export  class PIDResolver {
     }
 
     async #resolveFromCommand() {
-        return err('not_implemented');
+        const { timeoutMs, command, ensureUnique, constraints, returnInfo } = this.#options;
+        if (!command || !command?.pattern) {
+            return err('invalid_command_options', { command })
+        }
+        if (typeof command.pattern !== 'string' && (!command.pattern) instanceof RegExp) {
+            return err('invalid_command_options', { command })
+        }
+        this.log.debug('resolve.start', { strategy: 'command' });
+        const processes = await listProcesses(timeoutMs,this.log);
+
+        const commandToParse = {
+            pattern: command.pattern,
+            caseSensitive: command.caseSensitive ?? false,
+            fullCommand: command.fullCommand ?? false
+        }
+
+        const match = buildMatcher(commandToParse);
+        const candidates = processes.filter(match);
+
+        if (candidates.length === 0) {
+            return err('no_match');
+        }
+
+        let selected;
+        if (candidates.length > 1) {
+            //ensureUnique test
+            if (ensureUnique) {
+                return err('multiple_matches', { count: candidates.length, pids: candidates.map(p => p.pid) });
+            }
+            //selectionner le process
+            const pick = command.pick ?? 'first';
+            if(pick === 'newest') selected = candidates.at(-1);
+            else if (pick === 'oldest') selected = candidates[0];
+            else selected = candidates[0];
+            this.log.warn('command.multiple', { count: candidates.length, picked: selected.pid });
+        } else {
+            selected = candidates[0];
+        }
+
+        if (!isPidAlive(selected.pid)) {
+            return err('pid_not_alive', { pid: selected.pid });
+        }
+
+        //contrainte t0 
+        const first = await this.#validateConstraints(selected.pid);
+        if (!first.ok) {
+            this.log.warn('constraint.fail', { pid: selected.pid, error: first.error });
+            return first;
+        }
+        this.log.debug('constraints.ok', { pid: selected.pid });
+        //strict t1
+        let second = await this.revalidateConstraintsAtT1(first,selected.pid,constraints);
+        if (second && second.ok === false) return second;
+        if (returnInfo) {
+            const info = second?.info ?? first?.info ?? await getProcessInfo(selected.pid, timeoutMs, this.log);
+            return ok({ pid: selected.pid, info });
+        }
+        return ok({ pid: selected.pid })
     }
 
     async #resolveFromPort() {

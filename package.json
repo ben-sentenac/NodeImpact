@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node --watch bin/agent.js --config agent-config-yaml",
     "dev":"sudo $(which node) bin/agent.js",
-    "test": "node --test --test-reporter=spec",
+    "test": "node --test 'test/unit/**/*.test.js' --jobs=1",
     "test:watch": "node --test --watch",
     "test:cov": "c8 -r text -r html node --test"
   },

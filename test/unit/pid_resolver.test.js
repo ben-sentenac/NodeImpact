@@ -1,14 +1,16 @@
 import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { PIDResolver } from '../../src/lib/pid_resolver.js';
+import {PIDResolver } from '../../src/lib/pid_resolver.js';
 import { writeFile } from 'node:fs/promises';
-import { createPIDFile,makeSpyLogger,makeTempDir,cleanup } from '../test-utils.js';
+import { createPIDFile, makeSpyLogger, makeTempDir, cleanup } from '../test-utils.js';
 import path from 'node:path';
 import os from 'node:os';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-
+import { spawnSleepy } from '../test_context.js';
 let temp;
+
+
 
 test('PID RESOLVER TEST SUITE', async (t) => {
 
@@ -139,11 +141,6 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         assert.ok(result.ok === false);
         assert.equal(result.error, 'not_implemented');
 
-        r = new PIDResolver({ strategy: 'command' });
-        result = await r.resolve();
-        assert.ok(result.ok === false);
-        assert.equal(result.error, 'not_implemented');
-
         r = new PIDResolver({ strategy: 'port' });
         result = await r.resolve();
         assert.ok(result.ok === false);
@@ -255,7 +252,6 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         });
 
         const result = await r.resolve();
-        console.log(result);
         assert.equal(result.ok, true);
     });
     await t.test('strict:KO si metadonnées changent entre t0 et t1', async () => {
@@ -272,35 +268,35 @@ test('PID RESOLVER TEST SUITE', async (t) => {
     setInterval(()=>{}, 1e6);
     process.on('message', m => { if (m === 'flip') process.title = 'pidres-child-t1'; });
   `, 'utf8');
-            let child;
-            try {
-                child = fork(childPath, { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
-        const [{ pid }] = await once(child, 'message'); // { ready:true, pid }
+        let child;
+        try {
+            child = fork(childPath, { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+            const [{ pid }] = await once(child, 'message'); // { ready:true, pid }
 
-        const pidFile = path.join(temp, 'child.pid');
-        await writeFile(pidFile, String(pid), 'utf8');
+            const pidFile = path.join(temp, 'child.pid');
+            await writeFile(pidFile, String(pid), 'utf8');
 
-        const r = new PIDResolver({
-            strategy: 'file',
-            file: pidFile,
-            constraints: { user: os.userInfo().username }, // stable
-            strict: { delayMs: 120 },
-        });
+            const r = new PIDResolver({
+                strategy: 'file',
+                file: pidFile,
+                constraints: { user: os.userInfo().username }, // stable
+                strict: { delayMs: 120 },
+            });
 
-        // bascule titre pendant la fenêtre strict
-        setTimeout(() => { child.send('flip'); }, 40);
+            // bascule titre pendant la fenêtre strict
+            setTimeout(() => { child.send('flip'); }, 40);
 
-        const res = await r.resolve();
-        assert.equal(res.ok, false);
-        assert.equal(res.error, 'strict_identity_changed');
+            const res = await r.resolve();
+            assert.equal(res.ok, false);
+            assert.equal(res.error, 'strict_identity_changed');
 
-            } catch (error) {
-                console.error(error)
-            } finally {
-                child.kill();
-            }
-        
-        
+        } catch (error) {
+            console.error(error)
+        } finally {
+            child.kill();
+        }
+
+
     });
 
     await t.test('returnInfo: sans contraintes renvoie info issue de ps', async () => {
@@ -347,7 +343,7 @@ test('PID RESOLVER TEST SUITE', async (t) => {
     });
 
     await t.test('logger niveau warn : les debug ne doivent pas apparaître', async () => {
-        await createPIDFile(temp,process.pid);
+        await createPIDFile(temp, process.pid);
         const { logger, calls } = makeSpyLogger();
         const r = new PIDResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger, logLevel: 'warn' });
         const res = await r.resolve();
@@ -367,17 +363,70 @@ test('PID RESOLVER TEST SUITE', async (t) => {
         assert.equal(hasEvent, true);
 
     });
-
-    /*
     await t.test('logger partiel (seulement error) ne casse rien', async () => {
         const minimal = { error: () => { } }; // pas de debug/info/warn
         await createPIDFile(temp, process.pid);
-        const r = new PidResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger: minimal, logLevel: 'debug' });
+        const r = new PIDResolver({ strategy: 'file', file: path.join(temp, 'app.pid'), logger: minimal, logLevel: 'debug' });
         const res = await r.resolve();
         assert.equal(res.ok, true);
 
     });
+    /*
+    TODO: ajouter un contexte pour les test pour eviter les conflits avc spanwDummy
+            la creation et deletion des dossier se chevauchent 
+        - chaque test creé et efface son dossier de fixture
+        - eviter les hooks beforeEach et afterEach
+        
+    await t.test('command: trouve un process via fullCmd (args)', async () => {
+        const child = spawnSleepy(['--role=worker', '--tag=A']);
+        // assure un peu de temps pour que ps le voie
+        try {
+             await new Promise(r => setTimeout(r, 100));
+
+        const r = new PIDResolver({
+            strategy: 'command',
+            command: { pattern: '--role=worker', fullCommand: true },
+            returnInfo: true,
+        });
+        const res = await r.resolve();
+        assert.equal(res.ok, true);
+        assert.ok(res.info.args.includes('--role=worker'));
+        } finally {
+            await child.stop();
+        }
+       
+
+        
+    });
+
+    await t.test('command: no_match si motif absent', async () => {
+        const r = new PIDResolver({
+            strategy: 'command',
+            command: { pattern: 'this-string-should-not-exist-xyz', fullCommand: true },
+        });
+        const res = await r.resolve();
+        assert.equal(res.ok, false);
+        assert.equal(res.error, 'no_match');
+    });
+
+    await t.test('command: multiple_matches puis pick:first', async () => {
+        const c1 = spawnSleepy(['--tag=Z']);
+        const c2 = spawnSleepy(['--tag=Z']);
+        try {
+        await new Promise(r => setTimeout(r, 100));
+
+        const r = new PIDResolver({
+            strategy: 'command',
+            command: { pattern: '--tag=Z', fullCommand: true, pick: 'first' },
+            ensureUnique: false, // autorise la sélection
+        });
+        const res = await r.resolve();
+        assert.equal(res.ok, true);
+        assert.ok([c1.pid, c2.pid].includes(res.pid));
+        } finally {
+            await c1.stop();
+            await c2.stop();
+        }
+    });
     */
-
-
 });
